@@ -2,6 +2,7 @@ use crate::adapters::{AdapterResult, ConfigAdapter, PlanRequest};
 use crate::domain::*;
 use quick_xml::de::from_str;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, fs, path::Path};
 
 #[derive(Deserialize, Default)]
@@ -63,6 +64,40 @@ pub struct MavenAdapter;
 impl MavenAdapter {
     pub fn from_system() -> Self {
         Self
+    }
+
+    pub fn plan_mirror_update(
+        &self,
+        path: &Path,
+        mirror_id: &str,
+        next_url: &str,
+        current: &ReadResult,
+    ) -> AdapterResult<ChangePlan> {
+        let xml = fs::read_to_string(path).map_err(|error| AdapterError {
+            code: AdapterErrorCode::IoFailure,
+            message: format!("无法读取 {}：{error}", path.display()),
+        })?;
+        crate::adapters::maven_xml::replace_mirror_url(&xml, mirror_id, next_url)?;
+        let field = format!("mirror.{mirror_id}");
+        Ok(ChangePlan {
+            id: format!("maven-mirror-{mirror_id}"),
+            tool: self.tool(),
+            file_checksums: BTreeMap::from([(
+                path.display().to_string(),
+                format!("{:x}", Sha256::digest(xml.as_bytes())),
+            )]),
+            changes: vec![PlannedChange {
+                file: path.display().to_string(),
+                field: field.clone(),
+                previous_value: current
+                    .effective_config
+                    .values
+                    .get(&field)
+                    .and_then(|value| value.value.clone()),
+                next_value: Some(next_url.into()),
+                risk: None,
+            }],
+        })
     }
 }
 impl ConfigAdapter for MavenAdapter {
@@ -147,8 +182,25 @@ impl ConfigAdapter for MavenAdapter {
             diagnostics,
         })
     }
-    fn plan(&self, _: PlanRequest<'_>) -> AdapterResult<ChangePlan> {
-        Err(unsupported())
+    fn plan(&self, request: PlanRequest<'_>) -> AdapterResult<ChangePlan> {
+        let (field, value) = request
+            .profile
+            .values
+            .iter()
+            .next()
+            .ok_or_else(unsupported)?;
+        let mirror_id = field.strip_prefix("mirror.").ok_or_else(unsupported)?;
+        let path = settings_paths()
+            .into_iter()
+            .find(|(scope, _, _)| *scope == ConfigScope::User)
+            .map(|(_, _, path)| path)
+            .ok_or_else(unsupported)?;
+        self.plan_mirror_update(
+            Path::new(&path),
+            mirror_id,
+            value.as_str(),
+            request.current_config,
+        )
     }
     fn apply(&self, _: ConfirmedChangePlan) -> AdapterResult<ApplyResult> {
         Err(unsupported())
