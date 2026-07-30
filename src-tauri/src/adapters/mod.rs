@@ -7,6 +7,7 @@ use crate::domain::{
 pub type AdapterResult<T> = Result<T, AdapterError>;
 
 pub mod maven;
+pub mod maven_xml;
 pub mod npm;
 
 pub struct PlanRequest<'a> {
