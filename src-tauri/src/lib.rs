@@ -7,6 +7,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(commands::npm::NpmPreviewStore::default())
         .invoke_handler(tauri::generate_handler![
+            commands::maven::scan_maven,
             commands::npm::scan_npm,
             commands::npm::preview_npm_profile,
             commands::npm::apply_npm_preview,
