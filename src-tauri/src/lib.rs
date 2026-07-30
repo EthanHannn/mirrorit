@@ -10,7 +10,8 @@ pub fn run() {
             commands::npm::scan_npm,
             commands::npm::preview_npm_profile,
             commands::npm::apply_npm_preview,
-            commands::npm::rollback_npm_snapshot
+            commands::npm::rollback_npm_snapshot,
+            commands::npm::check_npm_health
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

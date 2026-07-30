@@ -6,8 +6,8 @@ use serde::Deserialize;
 
 use crate::adapters::{npm::NpmAdapter, ConfigAdapter};
 use crate::domain::{
-    ApplyResult, ChangePlan, ConfigScope, NonSensitiveValue, Operation, Profile, ReadResult,
-    SnapshotRef, ToolContext,
+    ApplyResult, ChangePlan, ConfigScope, HealthCheckResult, HealthCheckTarget, NonSensitiveValue,
+    Operation, Profile, ReadResult, SnapshotRef, ToolContext,
 };
 
 #[derive(Default)]
@@ -120,6 +120,13 @@ pub fn apply_npm_preview(
 pub fn rollback_npm_snapshot(snapshot_id: String) -> Result<Operation, String> {
     NpmAdapter::from_system()
         .rollback(&SnapshotRef(snapshot_id))
+        .map_err(|error| error.message)
+}
+
+#[tauri::command]
+pub fn check_npm_health(address: String) -> Result<HealthCheckResult, String> {
+    NpmAdapter::from_system()
+        .health_check(&HealthCheckTarget { address })
         .map_err(|error| error.message)
 }
 

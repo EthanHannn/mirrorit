@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
+  Activity,
   CircleAlert,
   FileDiff,
   FolderSearch,
@@ -58,6 +59,18 @@ interface ApplyResult {
   };
 }
 
+interface HealthCheckResult {
+  status:
+    | "healthy"
+    | "dns_failure"
+    | "tls_failure"
+    | "authentication_failure"
+    | "timeout"
+    | "http_failure";
+  elapsed_ms: number;
+  message: string | null;
+}
+
 type ProfileKind = "official" | "mirror" | "custom";
 type TargetScope = "user" | "project";
 
@@ -93,6 +106,10 @@ function App() {
   const [customRegistry, setCustomRegistry] = useState("");
   const [plan, setPlan] = useState<ChangePlan | null>(null);
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
+  const [healthTarget, setHealthTarget] = useState("");
+  const [healthResult, setHealthResult] = useState<HealthCheckResult | null>(
+    null,
+  );
   const [scanState, setScanState] = useState<"idle" | "loading" | "error">(
     "idle",
   );
@@ -204,6 +221,21 @@ function App() {
     }
   }
 
+  async function checkHealth() {
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      const result = await invoke<HealthCheckResult>("check_npm_health", {
+        address: healthTarget.trim(),
+      });
+      setHealthResult(result);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
   return (
     <ThemeProvider>
       <div className="min-h-svh bg-background text-foreground">
@@ -279,6 +311,50 @@ function App() {
                 )}
                 扫描配置
               </Button>
+            </section>
+
+            <section
+              aria-labelledby="health-heading"
+              className="border-b border-border py-6"
+            >
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    显式检查
+                  </p>
+                  <h2
+                    id="health-heading"
+                    className="mt-1 text-base font-semibold"
+                  >
+                    npm 源连通性
+                  </h2>
+                </div>
+                <Button
+                  disabled={scanState === "loading" || !healthTarget.trim()}
+                  onClick={checkHealth}
+                  variant="outline"
+                >
+                  <Activity aria-hidden="true" />
+                  检查连接
+                </Button>
+              </div>
+              <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
+                <input
+                  aria-label="检查地址"
+                  className="h-9 rounded-md border border-input bg-card px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+                  onChange={(event) => setHealthTarget(event.target.value)}
+                  placeholder="https://registry.npmjs.org/"
+                  value={healthTarget}
+                />
+                {healthResult ? (
+                  <p className="self-center text-sm text-muted-foreground">
+                    {healthResult.status === "healthy"
+                      ? "连接正常"
+                      : healthResult.status.replace(/_/g, " ")}{" "}
+                    · {healthResult.elapsed_ms} ms
+                  </p>
+                ) : null}
+              </div>
             </section>
 
             <section

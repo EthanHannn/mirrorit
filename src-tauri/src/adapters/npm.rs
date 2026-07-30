@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Instant;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -11,9 +12,9 @@ use crate::adapters::{AdapterResult, ConfigAdapter, PlanRequest};
 use crate::domain::{
     AdapterError, AdapterErrorCode, ApplyResult, ChangePlan, ConfigScope, ConfigSource,
     ConfirmedChangePlan, DetectionContext, EffectiveConfig, EffectiveValue, HealthCheckResult,
-    HealthCheckTarget, Operation, OperationKind, OperationOutcome, PlannedChange, Profile,
-    ReadResult, Snapshot, SnapshotFile, SnapshotRef, ToolCapability, ToolContext, ToolDetection,
-    ToolId,
+    HealthCheckStatus, HealthCheckTarget, Operation, OperationKind, OperationOutcome,
+    PlannedChange, Profile, ReadResult, Snapshot, SnapshotFile, SnapshotRef, ToolCapability,
+    ToolContext, ToolDetection, ToolId,
 };
 
 const USER_CONFIG_PRIORITY: u32 = 100;
@@ -279,8 +280,43 @@ impl ConfigAdapter for NpmAdapter {
         })
     }
 
-    fn health_check(&self, _target: &HealthCheckTarget) -> AdapterResult<HealthCheckResult> {
-        Err(unsupported_error("npm 连通性检查将在后续阶段提供。"))
+    fn health_check(&self, target: &HealthCheckTarget) -> AdapterResult<HealthCheckResult> {
+        let address = target.address.trim();
+        if !(address.starts_with("https://") || address.starts_with("http://")) {
+            return Err(AdapterError {
+                code: AdapterErrorCode::InvalidInput,
+                message: "检查地址必须以 http:// 或 https:// 开头。".into(),
+            });
+        }
+        let started_at = Instant::now();
+        let client = reqwest::blocking::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|error| AdapterError {
+                code: AdapterErrorCode::IoFailure,
+                message: format!("无法创建检查请求：{error}"),
+            })?;
+
+        let result = match client.get(address).send() {
+            Ok(response) => {
+                let status = classify_http_status(response.status().as_u16());
+                HealthCheckResult {
+                    target: target.clone(),
+                    status,
+                    elapsed_ms: started_at.elapsed().as_millis() as u64,
+                    message: Some(format!("HTTP {}", response.status().as_u16())),
+                }
+            }
+            Err(error) => HealthCheckResult {
+                target: target.clone(),
+                status: classify_request_error(&error),
+                elapsed_ms: started_at.elapsed().as_millis() as u64,
+                message: Some("请求未完成；请检查网络、证书或代理设置。".into()),
+            },
+        };
+
+        Ok(result)
     }
 }
 
@@ -532,13 +568,6 @@ fn redact_credentials(value: &str) -> String {
     )
 }
 
-fn unsupported_error(message: &str) -> AdapterError {
-    AdapterError {
-        code: AdapterErrorCode::Unsupported,
-        message: message.into(),
-    }
-}
-
 fn file_checksum(path: &Path) -> AdapterResult<String> {
     match fs::read(path) {
         Ok(content) => Ok(format!("{:x}", Sha256::digest(content))),
@@ -625,6 +654,30 @@ fn write_atomic(path: &Path, content: &[u8], snapshot: &SnapshotRef) -> AdapterR
         code: AdapterErrorCode::IoFailure,
         message: format!("无法完成配置替换：{error}"),
     })
+}
+
+fn classify_http_status(status: u16) -> HealthCheckStatus {
+    if matches!(status, 401 | 403) {
+        HealthCheckStatus::AuthenticationFailure
+    } else if (200..400).contains(&status) {
+        HealthCheckStatus::Healthy
+    } else {
+        HealthCheckStatus::HttpFailure
+    }
+}
+
+fn classify_request_error(error: &reqwest::Error) -> HealthCheckStatus {
+    if error.is_timeout() {
+        return HealthCheckStatus::Timeout;
+    }
+    let text = error.to_string().to_ascii_lowercase();
+    if text.contains("dns") || text.contains("name or service not known") {
+        HealthCheckStatus::DnsFailure
+    } else if text.contains("tls") || text.contains("certificate") || text.contains("ssl") {
+        HealthCheckStatus::TlsFailure
+    } else {
+        HealthCheckStatus::HttpFailure
+    }
 }
 
 #[cfg(test)]
@@ -892,6 +945,16 @@ mod tests {
         assert_eq!(error.code, AdapterErrorCode::ExternalModification);
 
         fs::remove_dir_all(root).expect("fixture directory should be removed");
+    }
+
+    #[test]
+    fn classifies_http_responses_without_network_access() {
+        assert_eq!(classify_http_status(200), HealthCheckStatus::Healthy);
+        assert_eq!(
+            classify_http_status(403),
+            HealthCheckStatus::AuthenticationFailure
+        );
+        assert_eq!(classify_http_status(503), HealthCheckStatus::HttpFailure);
     }
 
     fn test_directory(name: &str) -> PathBuf {
