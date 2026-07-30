@@ -3,12 +3,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use sha2::{Digest, Sha256};
+
 use crate::adapters::{AdapterResult, ConfigAdapter, PlanRequest};
 use crate::domain::{
     AdapterError, AdapterErrorCode, ApplyResult, ChangePlan, ConfigScope, ConfigSource,
     ConfirmedChangePlan, DetectionContext, EffectiveConfig, EffectiveValue, HealthCheckResult,
-    HealthCheckTarget, Operation, ReadResult, SnapshotRef, ToolCapability, ToolContext,
-    ToolDetection, ToolId,
+    HealthCheckTarget, Operation, PlannedChange, Profile, ReadResult, SnapshotRef, ToolCapability,
+    ToolContext, ToolDetection, ToolId,
 };
 
 const USER_CONFIG_PRIORITY: u32 = 100;
@@ -81,7 +83,7 @@ impl ConfigAdapter for NpmAdapter {
             tool: self.tool(),
             installed: version.is_some(),
             version,
-            capabilities: vec![ToolCapability::Read],
+            capabilities: vec![ToolCapability::Read, ToolCapability::Plan],
         })
     }
 
@@ -125,8 +127,21 @@ impl ConfigAdapter for NpmAdapter {
         })
     }
 
-    fn plan(&self, _request: PlanRequest<'_>) -> AdapterResult<ChangePlan> {
-        Err(unsupported_error("npm 配置预览将在后续阶段提供。"))
+    fn plan(&self, request: PlanRequest<'_>) -> AdapterResult<ChangePlan> {
+        let Some(path) = &self.user_config_path else {
+            return Err(AdapterError {
+                code: AdapterErrorCode::InvalidInput,
+                message: "未能定位用户级 .npmrc，无法生成预览。".into(),
+            });
+        };
+
+        self.plan_for_target(
+            path,
+            ConfigScope::User,
+            USER_CONFIG_PRIORITY,
+            request.profile,
+            request.current_config,
+        )
     }
 
     fn apply(&self, _plan: ConfirmedChangePlan) -> AdapterResult<ApplyResult> {
@@ -139,6 +154,55 @@ impl ConfigAdapter for NpmAdapter {
 
     fn health_check(&self, _target: &HealthCheckTarget) -> AdapterResult<HealthCheckResult> {
         Err(unsupported_error("npm 连通性检查将在后续阶段提供。"))
+    }
+}
+
+impl NpmAdapter {
+    pub fn plan_for_target(
+        &self,
+        path: &Path,
+        scope: ConfigScope,
+        priority: u32,
+        profile: &Profile,
+        current_config: &ReadResult,
+    ) -> AdapterResult<ChangePlan> {
+        let file = path.display().to_string();
+        let file_checksum = file_checksum(path)?;
+        let changes = profile
+            .values
+            .iter()
+            .filter(|(field, _)| is_supported_key(field))
+            .map(|(field, next_value)| {
+                let effective_value = current_config.effective_config.values.get(field);
+                let previous_value = effective_value.and_then(|value| {
+                    value
+                        .sources
+                        .iter()
+                        .rev()
+                        .find(|source| source.scope == scope && source.location == file)
+                        .and_then(|source| source.value.clone())
+                });
+                let overridden = effective_value
+                    .and_then(|value| value.sources.last())
+                    .is_some_and(|source| source.priority > priority);
+
+                PlannedChange {
+                    file: file.clone(),
+                    field: field.clone(),
+                    previous_value,
+                    next_value: Some(next_value.as_str().to_owned()),
+                    risk: overridden
+                        .then(|| "存在更高优先级的环境变量，应用后该值可能不会生效。".into()),
+                }
+            })
+            .collect();
+
+        Ok(ChangePlan {
+            id: format!("npm-{}-{}", profile.id, scope_label(scope)),
+            tool: self.tool(),
+            file_checksums: BTreeMap::from([(file, file_checksum)]),
+            changes,
+        })
     }
 }
 
@@ -288,9 +352,29 @@ fn unsupported_error(message: &str) -> AdapterError {
     }
 }
 
+fn file_checksum(path: &Path) -> AdapterResult<String> {
+    match fs::read(path) {
+        Ok(content) => Ok(format!("{:x}", Sha256::digest(content))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok("missing".into()),
+        Err(error) => Err(AdapterError {
+            code: AdapterErrorCode::IoFailure,
+            message: format!("无法读取 {}：{error}", path.display()),
+        }),
+    }
+}
+
+fn scope_label(scope: ConfigScope) -> &'static str {
+    match scope {
+        ConfigScope::System => "system",
+        ConfigScope::User => "user",
+        ConfigScope::Project => "project",
+        ConfigScope::Environment => "environment",
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::domain::Profile;
+    use crate::domain::{NonSensitiveValue, Profile};
 
     use super::*;
 
@@ -380,28 +464,66 @@ mod tests {
     }
 
     #[test]
-    fn marks_write_operations_as_unsupported_during_read_only_phase() {
+    fn creates_a_deterministic_preview_without_writing() {
         let adapter = NpmAdapter::with_sources(None, BTreeMap::new());
         let profile = Profile {
             id: "fixture".into(),
             name: "fixture".into(),
-            values: BTreeMap::new(),
+            values: BTreeMap::from([(
+                "registry".into(),
+                NonSensitiveValue::new("https://registry.next.example/"),
+            )]),
         };
         let current_config = ReadResult {
             effective_config: EffectiveConfig {
                 tool: ToolId::Npm,
-                values: BTreeMap::new(),
+                values: BTreeMap::from([(
+                    "registry".into(),
+                    EffectiveValue {
+                        value: Some("https://registry.environment.example/".into()),
+                        sources: vec![
+                            ConfigSource {
+                                scope: ConfigScope::User,
+                                location: "C:/Users/example/.npmrc".into(),
+                                priority: USER_CONFIG_PRIORITY,
+                                sensitive: false,
+                                value: Some("https://registry.user.example/".into()),
+                            },
+                            ConfigSource {
+                                scope: ConfigScope::Environment,
+                                location: "NPM_CONFIG_REGISTRY".into(),
+                                priority: ENVIRONMENT_PRIORITY,
+                                sensitive: false,
+                                value: Some("https://registry.environment.example/".into()),
+                            },
+                        ],
+                    },
+                )]),
             },
             diagnostics: Vec::new(),
         };
 
-        let error = adapter
-            .plan(PlanRequest {
-                profile: &profile,
-                current_config: &current_config,
-            })
-            .expect_err("read-only adapter must reject write planning");
+        let plan = adapter
+            .plan_for_target(
+                Path::new("C:/Users/example/.npmrc"),
+                ConfigScope::User,
+                USER_CONFIG_PRIORITY,
+                &profile,
+                &current_config,
+            )
+            .expect("preview should not require a file to exist");
 
-        assert_eq!(error.code, AdapterErrorCode::Unsupported);
+        assert_eq!(plan.id, "npm-fixture-user");
+        assert_eq!(plan.file_checksums["C:/Users/example/.npmrc"], "missing");
+        assert_eq!(plan.changes.len(), 1);
+        assert_eq!(
+            plan.changes[0].previous_value.as_deref(),
+            Some("https://registry.user.example/")
+        );
+        assert_eq!(
+            plan.changes[0].next_value.as_deref(),
+            Some("https://registry.next.example/")
+        );
+        assert!(plan.changes[0].risk.is_some());
     }
 }

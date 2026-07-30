@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   CircleAlert,
+  FileDiff,
   FolderSearch,
   LoaderCircle,
   PackageSearch,
@@ -35,15 +36,54 @@ interface NpmReadResult {
   diagnostics: string[];
 }
 
+interface ChangePlan {
+  id: string;
+  file_checksums: Record<string, string>;
+  changes: PlannedChange[];
+}
+
+interface PlannedChange {
+  file: string;
+  field: string;
+  previous_value: string | null;
+  next_value: string | null;
+  risk: string | null;
+}
+
+type ProfileKind = "official" | "mirror" | "custom";
+type TargetScope = "user" | "project";
+
 const scopeLabels: Record<ConfigScope, string> = {
   user: "用户级",
   project: "项目级",
   environment: "环境变量",
 };
 
+const profileDefinitions: Record<
+  Exclude<ProfileKind, "custom">,
+  { id: string; name: string; registry: string; description: string }
+> = {
+  official: {
+    id: "npm-official",
+    name: "官方源",
+    registry: "https://registry.npmjs.org/",
+    description: "npm 官方 registry",
+  },
+  mirror: {
+    id: "npmmirror",
+    name: "公共镜像",
+    registry: "https://registry.npmmirror.com/",
+    description: "候选公共镜像，应用前建议检查连通性",
+  },
+};
+
 function App() {
   const [projectDirectory, setProjectDirectory] = useState("");
   const [result, setResult] = useState<NpmReadResult | null>(null);
+  const [profileKind, setProfileKind] = useState<ProfileKind>("official");
+  const [targetScope, setTargetScope] = useState<TargetScope>("user");
+  const [customRegistry, setCustomRegistry] = useState("");
+  const [plan, setPlan] = useState<ChangePlan | null>(null);
   const [scanState, setScanState] = useState<"idle" | "loading" | "error">(
     "idle",
   );
@@ -60,6 +100,41 @@ function App() {
         projectDirectory: projectDirectory.trim() || null,
       });
       setResult(scanResult);
+      setPlan(null);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function previewProfile() {
+    const selectedProfile =
+      profileKind === "custom"
+        ? {
+            id: "custom-registry",
+            name: "自定义源",
+            registry: customRegistry.trim(),
+          }
+        : profileDefinitions[profileKind];
+
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      const [scanResult, previewResult] = await Promise.all([
+        invoke<NpmReadResult>("scan_npm", {
+          projectDirectory: projectDirectory.trim() || null,
+        }),
+        invoke<ChangePlan>("preview_npm_profile", {
+          request: {
+            projectDirectory: projectDirectory.trim() || null,
+            targetScope,
+            profile: selectedProfile,
+          },
+        }),
+      ]);
+      setResult(scanResult);
+      setPlan(previewResult);
       setScanState("idle");
     } catch (error) {
       setScanState("error");
@@ -168,6 +243,115 @@ function App() {
               <p className="self-end pb-2 text-xs text-muted-foreground">
                 未填写时只读取用户级和环境变量配置
               </p>
+            </section>
+
+            <section
+              aria-labelledby="profile-heading"
+              className="border-b border-border py-6"
+            >
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    下一步
+                  </p>
+                  <h2
+                    id="profile-heading"
+                    className="mt-1 text-base font-semibold"
+                  >
+                    预览配置档
+                  </h2>
+                </div>
+                <Button
+                  disabled={scanState === "loading"}
+                  onClick={previewProfile}
+                  variant="outline"
+                >
+                  <FileDiff aria-hidden="true" />
+                  查看差异
+                </Button>
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                {(
+                  Object.keys(profileDefinitions) as Array<
+                    Exclude<ProfileKind, "custom">
+                  >
+                ).map((kind) => {
+                  const profile = profileDefinitions[kind];
+                  const selected = profileKind === kind;
+                  return (
+                    <button
+                      aria-pressed={selected}
+                      className={
+                        selected
+                          ? "min-h-24 border border-primary bg-primary/5 p-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+                          : "min-h-24 border border-border bg-card p-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30"
+                      }
+                      key={kind}
+                      onClick={() => setProfileKind(kind)}
+                      type="button"
+                    >
+                      <p className="text-sm font-medium">{profile.name}</p>
+                      <code className="mt-2 block truncate font-mono text-xs text-muted-foreground">
+                        {profile.registry}
+                      </code>
+                      <p className="mt-2 text-xs leading-4 text-muted-foreground">
+                        {profile.description}
+                      </p>
+                    </button>
+                  );
+                })}
+                <button
+                  aria-pressed={profileKind === "custom"}
+                  className={
+                    profileKind === "custom"
+                      ? "min-h-24 border border-primary bg-primary/5 p-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+                      : "min-h-24 border border-border bg-card p-3 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30"
+                  }
+                  onClick={() => setProfileKind("custom")}
+                  type="button"
+                >
+                  <p className="text-sm font-medium">自定义源</p>
+                  <p className="mt-2 text-xs leading-4 text-muted-foreground">
+                    使用未含凭据的 HTTPS registry 地址。
+                  </p>
+                </button>
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                {profileKind === "custom" ? (
+                  <label className="grid gap-1.5 text-sm font-medium">
+                    <span>自定义 registry</span>
+                    <input
+                      className="h-9 rounded-md border border-input bg-card px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+                      onChange={(event) =>
+                        setCustomRegistry(event.target.value)
+                      }
+                      placeholder="https://registry.example.com/"
+                      value={customRegistry}
+                    />
+                  </label>
+                ) : (
+                  <div className="grid content-end text-sm">
+                    <p className="text-muted-foreground">
+                      预览只生成差异，不会修改任何配置文件。
+                    </p>
+                  </div>
+                )}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  <span>目标作用域</span>
+                  <select
+                    className="h-9 rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+                    onChange={(event) =>
+                      setTargetScope(event.target.value as TargetScope)
+                    }
+                    value={targetScope}
+                  >
+                    <option value="user">用户级 .npmrc</option>
+                    <option value="project">项目级 .npmrc</option>
+                  </select>
+                </label>
+              </div>
             </section>
 
             {scanState === "error" ? (
@@ -306,6 +490,63 @@ function App() {
                     </ul>
                   </section>
                 ) : null}
+              </section>
+            ) : null}
+
+            {plan ? (
+              <section aria-labelledby="plan-heading" className="mt-8">
+                <div className="flex items-baseline justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      只读预览
+                    </p>
+                    <h2
+                      id="plan-heading"
+                      className="mt-1 text-base font-semibold"
+                    >
+                      将要发生的变更
+                    </h2>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {plan.changes.length} 项字段
+                  </span>
+                </div>
+                <div className="mt-4 divide-y divide-border border-y border-border">
+                  {plan.changes.map((change) => (
+                    <article
+                      className="py-4"
+                      key={`${change.file}-${change.field}`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-mono text-sm font-medium">
+                          {change.field}
+                        </p>
+                        <p className="truncate font-mono text-xs text-muted-foreground">
+                          {change.file}
+                        </p>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+                        <div className="rounded-md bg-muted px-2.5 py-2">
+                          <p className="mb-1 text-muted-foreground">当前值</p>
+                          <code className="block truncate font-mono">
+                            {change.previous_value ?? "未设置"}
+                          </code>
+                        </div>
+                        <div className="rounded-md bg-primary/5 px-2.5 py-2">
+                          <p className="mb-1 text-primary">新值</p>
+                          <code className="block truncate font-mono">
+                            {change.next_value ?? "移除"}
+                          </code>
+                        </div>
+                      </div>
+                      {change.risk ? (
+                        <p className="mt-3 border-l-2 border-warning pl-2 text-xs text-warning">
+                          {change.risk}
+                        </p>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
               </section>
             ) : null}
           </main>
