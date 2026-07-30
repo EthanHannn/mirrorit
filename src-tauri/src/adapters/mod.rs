@@ -76,6 +76,7 @@ mod tests {
                                 location: "C:/Users/example/.npmrc".into(),
                                 priority: 10,
                                 sensitive: false,
+                                value: Some("https://registry.npmjs.org/".into()),
                             }],
                         },
                     )]),

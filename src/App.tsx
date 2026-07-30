@@ -1,11 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
-  ChevronRight,
   CircleAlert,
   FolderSearch,
   LoaderCircle,
   PackageSearch,
   RefreshCw,
+  ShieldCheck,
   Terminal,
 } from "lucide-react";
 import { useState } from "react";
@@ -20,6 +20,7 @@ interface ConfigSource {
   location: string;
   priority: number;
   sensitive: boolean;
+  value: string | null;
 }
 
 interface EffectiveValue {
@@ -236,28 +237,47 @@ function App() {
                           <code className="block truncate rounded-md bg-muted px-2.5 py-2 font-mono text-xs text-foreground">
                             {value.value ?? "未设置"}
                           </code>
-                          <ol className="mt-3 flex flex-wrap items-center gap-1.5">
+                          <div className="mt-4 flex items-center gap-2">
+                            <span className="h-px w-5 bg-border" />
+                            <p className="text-xs font-medium text-muted-foreground">
+                              来源轨迹
+                            </p>
+                          </div>
+                          <ol className="mt-3 grid gap-2">
                             {value.sources.map((source, index) => (
                               <li
-                                className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                                key={`${source.location}-${source.priority}`}
+                                className="grid gap-2 border-l-2 border-border py-1.5 pl-3 text-xs"
+                                key={`${source.location}-${source.priority}-${index}`}
                               >
-                                {index > 0 ? (
-                                  <ChevronRight
-                                    aria-hidden="true"
-                                    className="size-3 text-border"
-                                  />
-                                ) : null}
-                                <span
-                                  className={
-                                    index === value.sources.length - 1
-                                      ? "rounded-full bg-primary/10 px-2 py-1 font-medium text-primary"
-                                      : "rounded-full border border-border px-2 py-1"
-                                  }
-                                >
-                                  {scopeLabels[source.scope]} ·{" "}
-                                  {source.location}
-                                </span>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-medium">
+                                    {scopeLabels[source.scope]} ·{" "}
+                                    {source.location}
+                                  </span>
+                                  <span
+                                    className={
+                                      index === value.sources.length - 1
+                                        ? "rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary"
+                                        : "rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground"
+                                    }
+                                  >
+                                    {index === value.sources.length - 1
+                                      ? "最终生效"
+                                      : "被后续来源覆盖"}
+                                  </span>
+                                  {source.sensitive ? (
+                                    <span className="inline-flex items-center gap-1 text-warning">
+                                      <ShieldCheck
+                                        aria-hidden="true"
+                                        className="size-3"
+                                      />
+                                      凭据已掩盖
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <code className="block truncate font-mono text-muted-foreground">
+                                  {source.value ?? "未设置"}
+                                </code>
                               </li>
                             ))}
                           </ol>

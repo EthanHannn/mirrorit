@@ -55,6 +55,7 @@ pub struct ConfigSource {
     pub location: String,
     pub priority: u32,
     pub sensitive: bool,
+    pub value: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

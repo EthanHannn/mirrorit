@@ -229,6 +229,7 @@ fn add_entries(
             location: location.clone(),
             priority,
             sensitive: value.contains("://***@"),
+            value: Some(value.clone()),
         };
         let entry = values.entry(key).or_insert_with(|| EffectiveValue {
             value: None,
@@ -362,6 +363,18 @@ mod tests {
                 ConfigScope::User,
                 ConfigScope::Project,
                 ConfigScope::Environment
+            ]
+        );
+        assert_eq!(
+            registry
+                .sources
+                .iter()
+                .filter_map(|source| source.value.as_deref())
+                .collect::<Vec<_>>(),
+            vec![
+                "https://registry.user.example/",
+                "https://registry.project.example/",
+                "https://registry.environment.example/"
             ]
         );
     }
