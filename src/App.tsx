@@ -38,6 +38,7 @@ interface NpmReadResult {
   };
   diagnostics: string[];
 }
+type MavenReadResult = NpmReadResult;
 
 interface ChangePlan {
   id: string;
@@ -101,6 +102,7 @@ const profileDefinitions: Record<
 function App() {
   const [projectDirectory, setProjectDirectory] = useState("");
   const [result, setResult] = useState<NpmReadResult | null>(null);
+  const [mavenResult, setMavenResult] = useState<MavenReadResult | null>(null);
   const [profileKind, setProfileKind] = useState<ProfileKind>("official");
   const [targetScope, setTargetScope] = useState<TargetScope>("user");
   const [customRegistry, setCustomRegistry] = useState("");
@@ -127,6 +129,18 @@ function App() {
       });
       setResult(scanResult);
       setPlan(null);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function scanMaven() {
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      setMavenResult(await invoke<MavenReadResult>("scan_maven"));
       setScanState("idle");
     } catch (error) {
       setScanState("error");
@@ -270,6 +284,13 @@ function App() {
               >
                 <Terminal aria-hidden="true" className="size-3.5" />
                 npm
+              </a>
+              <a
+                className="mt-1 flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                href="#maven"
+              >
+                <Terminal aria-hidden="true" className="size-3.5" />
+                Maven
               </a>
             </nav>
             <p className="mt-8 px-2 text-xs font-medium text-muted-foreground">
@@ -715,6 +736,72 @@ function App() {
                 </Button>
               </section>
             ) : null}
+
+            <section
+              id="maven"
+              aria-labelledby="maven-heading"
+              className="mt-12 border-t border-border pt-8"
+            >
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    工具配置 / 只读扫描
+                  </p>
+                  <h2 id="maven-heading" className="mt-1 text-xl font-semibold">
+                    Maven settings.xml
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    读取全局和用户级 mirrors、活动代理与 profile 仓库，不修改
+                    XML 文件。
+                  </p>
+                </div>
+                <Button
+                  disabled={scanState === "loading"}
+                  onClick={scanMaven}
+                  variant="outline"
+                >
+                  <RefreshCw aria-hidden="true" />
+                  扫描 Maven
+                </Button>
+              </div>
+              {mavenResult ? (
+                <div className="mt-5 divide-y divide-border border-y border-border">
+                  {Object.entries(mavenResult.effective_config.values).map(
+                    ([key, value]) => (
+                      <article
+                        className="grid gap-3 py-4 md:grid-cols-[14rem_minmax(0,1fr)]"
+                        key={key}
+                      >
+                        <p className="font-mono text-sm font-medium">{key}</p>
+                        <div className="min-w-0">
+                          <code className="block truncate rounded-md bg-muted px-2.5 py-2 font-mono text-xs">
+                            {value.value ?? "未设置"}
+                          </code>
+                          <ol className="mt-2 flex flex-wrap gap-1.5">
+                            {value.sources.map((source, index) => (
+                              <li
+                                className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground"
+                                key={`${source.location}-${index}`}
+                              >
+                                {scopeLabels[source.scope]} · {source.location}
+                                {index === value.sources.length - 1
+                                  ? " · 最终生效"
+                                  : ""}
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      </article>
+                    ),
+                  )}
+                  {!Object.keys(mavenResult.effective_config.values).length ? (
+                    <p className="py-6 text-sm text-muted-foreground">
+                      未发现受支持的 Maven 配置项。
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </section>
           </main>
         </div>
       </div>
