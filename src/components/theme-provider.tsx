@@ -50,9 +50,8 @@ type ThemeProviderProps = {
 };
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [preference, setPreference] = useState<ThemePreference>(
-    getInitialPreference,
-  );
+  const [preference, setPreference] =
+    useState<ThemePreference>(getInitialPreference);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -76,10 +75,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     }
   }, [preference]);
 
-  const value = useMemo(
-    () => ({ preference, setPreference }),
-    [preference],
-  );
+  const value = useMemo(() => ({ preference, setPreference }), [preference]);
 
   return (
     <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>

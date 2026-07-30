@@ -1,8 +1,5 @@
 import { Monitor, Moon, Sun } from "lucide-react";
-import {
-  type ThemePreference,
-  useTheme,
-} from "@/components/theme-provider";
+import { type ThemePreference, useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 
 const themeOptions: Array<{
