@@ -2,25 +2,35 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::adapters::{AdapterResult, ConfigAdapter, PlanRequest};
 use crate::domain::{
     AdapterError, AdapterErrorCode, ApplyResult, ChangePlan, ConfigScope, ConfigSource,
     ConfirmedChangePlan, DetectionContext, EffectiveConfig, EffectiveValue, HealthCheckResult,
-    HealthCheckTarget, Operation, PlannedChange, Profile, ReadResult, SnapshotRef, ToolCapability,
-    ToolContext, ToolDetection, ToolId,
+    HealthCheckTarget, Operation, OperationKind, OperationOutcome, PlannedChange, Profile,
+    ReadResult, Snapshot, SnapshotFile, SnapshotRef, ToolCapability, ToolContext, ToolDetection,
+    ToolId,
 };
 
 const USER_CONFIG_PRIORITY: u32 = 100;
 const PROJECT_CONFIG_PRIORITY: u32 = 200;
 const ENVIRONMENT_PRIORITY: u32 = 300;
 
+#[derive(Debug, Serialize, Deserialize)]
+struct NpmSnapshotRecord {
+    snapshot: Snapshot,
+    original_content: Option<Vec<u8>>,
+}
+
 #[derive(Debug, Clone)]
 pub struct NpmAdapter {
     user_config_path: Option<PathBuf>,
     environment: BTreeMap<String, String>,
+    snapshot_directory: Option<PathBuf>,
 }
 
 impl NpmAdapter {
@@ -31,6 +41,7 @@ impl NpmAdapter {
         Self {
             user_config_path,
             environment,
+            snapshot_directory: None,
         }
     }
 
@@ -42,6 +53,20 @@ impl NpmAdapter {
         Self {
             user_config_path,
             environment,
+            snapshot_directory: None,
+        }
+    }
+
+    #[cfg(test)]
+    fn with_snapshot_directory(
+        user_config_path: Option<PathBuf>,
+        environment: BTreeMap<String, String>,
+        snapshot_directory: PathBuf,
+    ) -> Self {
+        Self {
+            user_config_path,
+            environment,
+            snapshot_directory: Some(snapshot_directory),
         }
     }
 
@@ -144,12 +169,114 @@ impl ConfigAdapter for NpmAdapter {
         )
     }
 
-    fn apply(&self, _plan: ConfirmedChangePlan) -> AdapterResult<ApplyResult> {
-        Err(unsupported_error("npm 配置写入将在后续阶段提供。"))
+    fn apply(&self, plan: ConfirmedChangePlan) -> AdapterResult<ApplyResult> {
+        let plan = plan.into_plan();
+        if plan.tool != self.tool() {
+            return Err(AdapterError {
+                code: AdapterErrorCode::InvalidInput,
+                message: "变更计划不属于 npm。".into(),
+            });
+        }
+        let (file, expected_checksum) = plan
+            .file_checksums
+            .iter()
+            .next()
+            .filter(|_| plan.file_checksums.len() == 1)
+            .ok_or_else(|| AdapterError {
+                code: AdapterErrorCode::InvalidInput,
+                message: "变更计划必须且只能包含一个目标文件。".into(),
+            })?;
+        if plan.changes.iter().any(|change| change.file != *file) {
+            return Err(AdapterError {
+                code: AdapterErrorCode::InvalidInput,
+                message: "变更计划包含不一致的目标文件。".into(),
+            });
+        }
+        if file_checksum(Path::new(file))? != *expected_checksum {
+            return Err(AdapterError {
+                code: AdapterErrorCode::ExternalModification,
+                message: "配置文件在预览后发生变化，请重新预览。".into(),
+            });
+        }
+
+        let path = Path::new(file);
+        let original_content = match fs::read(path) {
+            Ok(content) => Some(content),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => {
+                return Err(AdapterError {
+                    code: AdapterErrorCode::IoFailure,
+                    message: format!("无法读取 {}：{error}", path.display()),
+                });
+            }
+        };
+        let content = original_content
+            .as_deref()
+            .map(|content| {
+                String::from_utf8(content.to_vec()).map_err(|_| AdapterError {
+                    code: AdapterErrorCode::ParseFailure,
+                    message: "npm 配置不是 UTF-8 文本，已拒绝写入。".into(),
+                })
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let snapshot = self.create_snapshot(path, original_content)?;
+        let next_content = update_npmrc(&content, &plan.changes);
+        write_atomic(path, next_content.as_bytes(), &snapshot.id)?;
+
+        Ok(ApplyResult {
+            operation: Operation {
+                id: format!("apply-{}", snapshot.id.0),
+                kind: OperationKind::Apply,
+                tool: self.tool(),
+                outcome: OperationOutcome::Succeeded,
+                snapshot: Some(snapshot.id.clone()),
+                message: Some("npm 配置已更新，可使用快照回滚。".into()),
+            },
+            snapshot,
+        })
     }
 
-    fn rollback(&self, _snapshot: &SnapshotRef) -> AdapterResult<Operation> {
-        Err(unsupported_error("npm 配置回滚将在后续阶段提供。"))
+    fn rollback(&self, snapshot: &SnapshotRef) -> AdapterResult<Operation> {
+        let record_path = self
+            .snapshot_directory()?
+            .join(format!("{}.json", snapshot.0));
+        let content = fs::read(&record_path).map_err(|error| AdapterError {
+            code: AdapterErrorCode::IoFailure,
+            message: format!("无法读取快照 {}：{error}", snapshot.0),
+        })?;
+        let record: NpmSnapshotRecord =
+            serde_json::from_slice(&content).map_err(|_| AdapterError {
+                code: AdapterErrorCode::ParseFailure,
+                message: "快照内容无法识别，已拒绝回滚。".into(),
+            })?;
+        let file = record.snapshot.files.first().ok_or_else(|| AdapterError {
+            code: AdapterErrorCode::ParseFailure,
+            message: "快照不包含文件记录。".into(),
+        })?;
+        let path = Path::new(&file.path);
+        match record.original_content {
+            Some(content) => write_atomic(path, &content, snapshot)?,
+            None => match fs::remove_file(path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    return Err(AdapterError {
+                        code: AdapterErrorCode::IoFailure,
+                        message: format!("无法移除 {}：{error}", path.display()),
+                    });
+                }
+            },
+        }
+
+        Ok(Operation {
+            id: format!("rollback-{}", snapshot.0),
+            kind: OperationKind::Rollback,
+            tool: self.tool(),
+            outcome: OperationOutcome::Succeeded,
+            snapshot: Some(snapshot.clone()),
+            message: Some("npm 配置已从快照恢复。".into()),
+        })
     }
 
     fn health_check(&self, _target: &HealthCheckTarget) -> AdapterResult<HealthCheckResult> {
@@ -203,6 +330,66 @@ impl NpmAdapter {
             file_checksums: BTreeMap::from([(file, file_checksum)]),
             changes,
         })
+    }
+
+    fn create_snapshot(
+        &self,
+        path: &Path,
+        original_content: Option<Vec<u8>>,
+    ) -> AdapterResult<Snapshot> {
+        let created_at_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| AdapterError {
+                code: AdapterErrorCode::IoFailure,
+                message: "系统时间不可用，无法创建快照。".into(),
+            })?
+            .as_millis() as i64;
+        let snapshot = Snapshot {
+            id: SnapshotRef(format!("npm-{created_at_ms}")),
+            created_at_ms,
+            files: vec![SnapshotFile {
+                path: path.display().to_string(),
+                checksum: original_content
+                    .as_deref()
+                    .map(|content| format!("{:x}", Sha256::digest(content)))
+                    .unwrap_or_else(|| "missing".into()),
+                permissions: None,
+            }],
+        };
+        let directory = self.snapshot_directory()?;
+        fs::create_dir_all(&directory).map_err(|error| AdapterError {
+            code: AdapterErrorCode::IoFailure,
+            message: format!("无法创建快照目录：{error}"),
+        })?;
+        let record = NpmSnapshotRecord {
+            snapshot: snapshot.clone(),
+            original_content,
+        };
+        let content = serde_json::to_vec(&record).map_err(|_| AdapterError {
+            code: AdapterErrorCode::IoFailure,
+            message: "无法序列化快照。".into(),
+        })?;
+        fs::write(directory.join(format!("{}.json", snapshot.id.0)), content).map_err(|error| {
+            AdapterError {
+                code: AdapterErrorCode::IoFailure,
+                message: format!("无法保存快照：{error}"),
+            }
+        })?;
+
+        Ok(snapshot)
+    }
+
+    fn snapshot_directory(&self) -> AdapterResult<PathBuf> {
+        if let Some(directory) = &self.snapshot_directory {
+            return Ok(directory.clone());
+        }
+        let base = std::env::var("LOCALAPPDATA")
+            .or_else(|_| std::env::var("APPDATA"))
+            .map_err(|_| AdapterError {
+                code: AdapterErrorCode::IoFailure,
+                message: "未能定位本地应用数据目录。".into(),
+            })?;
+        Ok(Path::new(&base).join("MirrorIt").join("snapshots"))
     }
 }
 
@@ -372,8 +559,79 @@ fn scope_label(scope: ConfigScope) -> &'static str {
     }
 }
 
+fn update_npmrc(content: &str, changes: &[PlannedChange]) -> String {
+    let mut lines = content
+        .split_inclusive('\n')
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+
+    for change in changes {
+        let replacement = change
+            .next_value
+            .as_ref()
+            .map(|value| format!("{}={value}", change.field));
+        let index = lines.iter().rposition(|line| {
+            line.split_once('=')
+                .is_some_and(|(key, _)| normalize_key(key) == change.field)
+        });
+        match (index, replacement) {
+            (Some(index), Some(replacement)) => {
+                let line_ending = if lines[index].ends_with("\r\n") {
+                    "\r\n"
+                } else if lines[index].ends_with('\n') {
+                    "\n"
+                } else {
+                    ""
+                };
+                lines[index] = format!("{replacement}{line_ending}");
+            }
+            (Some(index), None) => {
+                lines.remove(index);
+            }
+            (None, Some(replacement)) => {
+                if !lines.is_empty() && !lines.last().is_some_and(|line| line.ends_with('\n')) {
+                    lines.push("\n".into());
+                }
+                lines.push(format!("{replacement}\n"));
+            }
+            (None, None) => {}
+        }
+    }
+
+    lines.concat()
+}
+
+fn write_atomic(path: &Path, content: &[u8], snapshot: &SnapshotRef) -> AdapterResult<()> {
+    let parent = path.parent().ok_or_else(|| AdapterError {
+        code: AdapterErrorCode::IoFailure,
+        message: "目标文件没有父目录。".into(),
+    })?;
+    fs::create_dir_all(parent).map_err(|error| AdapterError {
+        code: AdapterErrorCode::IoFailure,
+        message: format!("无法创建目标目录：{error}"),
+    })?;
+    let temporary_path = parent.join(format!(".mirrorit-{}.tmp", snapshot.0));
+    fs::write(&temporary_path, content).map_err(|error| AdapterError {
+        code: AdapterErrorCode::IoFailure,
+        message: format!("无法写入临时配置：{error}"),
+    })?;
+    if path.exists() {
+        fs::remove_file(path).map_err(|error| AdapterError {
+            code: AdapterErrorCode::IoFailure,
+            message: format!("无法替换现有配置：{error}"),
+        })?;
+    }
+    fs::rename(&temporary_path, path).map_err(|error| AdapterError {
+        code: AdapterErrorCode::IoFailure,
+        message: format!("无法完成配置替换：{error}"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     use crate::domain::{NonSensitiveValue, Profile};
 
     use super::*;
@@ -525,5 +783,124 @@ mod tests {
             Some("https://registry.next.example/")
         );
         assert!(plan.changes[0].risk.is_some());
+    }
+
+    #[test]
+    fn applies_a_preview_with_snapshot_and_restores_it() {
+        let root = test_directory("apply-rollback");
+        let config_path = root.join(".npmrc");
+        let snapshot_directory = root.join("snapshots");
+        fs::write(
+            &config_path,
+            "cache=C:\\\\npm-cache\nregistry=https://registry.previous.example/\n",
+        )
+        .expect("fixture config should be written");
+        let adapter = NpmAdapter::with_snapshot_directory(
+            Some(config_path.clone()),
+            BTreeMap::new(),
+            snapshot_directory,
+        );
+        let current_config = adapter
+            .read(&ToolContext {
+                project_directory: None,
+                include_project_sources: false,
+            })
+            .expect("fixture config should be readable");
+        let profile = Profile {
+            id: "fixture".into(),
+            name: "fixture".into(),
+            values: BTreeMap::from([(
+                "registry".into(),
+                NonSensitiveValue::new("https://registry.next.example/"),
+            )]),
+        };
+        let plan = adapter
+            .plan_for_target(
+                &config_path,
+                ConfigScope::User,
+                USER_CONFIG_PRIORITY,
+                &profile,
+                &current_config,
+            )
+            .expect("preview should succeed");
+
+        let applied = adapter
+            .apply(plan.confirm(1_722_000_000_000))
+            .expect("confirmed plan should apply");
+        assert_eq!(
+            fs::read_to_string(&config_path).expect("updated config should be readable"),
+            "cache=C:\\\\npm-cache\nregistry=https://registry.next.example/\n"
+        );
+
+        adapter
+            .rollback(&applied.snapshot.id)
+            .expect("snapshot should restore");
+        assert_eq!(
+            fs::read_to_string(&config_path).expect("restored config should be readable"),
+            "cache=C:\\\\npm-cache\nregistry=https://registry.previous.example/\n"
+        );
+
+        fs::remove_dir_all(root).expect("fixture directory should be removed");
+    }
+
+    #[test]
+    fn rejects_a_preview_when_the_target_changes_externally() {
+        let root = test_directory("external-change");
+        let config_path = root.join(".npmrc");
+        fs::write(
+            &config_path,
+            "registry=https://registry.previous.example/\n",
+        )
+        .expect("fixture config should be written");
+        let adapter = NpmAdapter::with_snapshot_directory(
+            Some(config_path.clone()),
+            BTreeMap::new(),
+            root.join("snapshots"),
+        );
+        let current_config = adapter
+            .read(&ToolContext {
+                project_directory: None,
+                include_project_sources: false,
+            })
+            .expect("fixture config should be readable");
+        let profile = Profile {
+            id: "fixture".into(),
+            name: "fixture".into(),
+            values: BTreeMap::from([(
+                "registry".into(),
+                NonSensitiveValue::new("https://registry.next.example/"),
+            )]),
+        };
+        let plan = adapter
+            .plan_for_target(
+                &config_path,
+                ConfigScope::User,
+                USER_CONFIG_PRIORITY,
+                &profile,
+                &current_config,
+            )
+            .expect("preview should succeed");
+        fs::write(
+            &config_path,
+            "registry=https://registry.external.example/\n",
+        )
+        .expect("external change should be written");
+
+        let error = adapter
+            .apply(plan.confirm(1_722_000_000_000))
+            .expect_err("changed target must reject the plan");
+        assert_eq!(error.code, AdapterErrorCode::ExternalModification);
+
+        fs::remove_dir_all(root).expect("fixture directory should be removed");
+    }
+
+    fn test_directory(name: &str) -> PathBuf {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be available")
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!("mirrorit-{name}-{timestamp}"));
+        fs::create_dir_all(&directory).expect("fixture directory should be created");
+        directory
     }
 }

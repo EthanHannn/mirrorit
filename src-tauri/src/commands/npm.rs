@@ -1,9 +1,17 @@
+use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::Mutex;
 
 use serde::Deserialize;
 
 use crate::adapters::{npm::NpmAdapter, ConfigAdapter};
-use crate::domain::{ConfigScope, NonSensitiveValue, Profile, ReadResult, ToolContext};
+use crate::domain::{
+    ApplyResult, ChangePlan, ConfigScope, NonSensitiveValue, Operation, Profile, ReadResult,
+    SnapshotRef, ToolContext,
+};
+
+#[derive(Default)]
+pub struct NpmPreviewStore(Mutex<BTreeMap<String, ChangePlan>>);
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -46,7 +54,8 @@ pub fn scan_npm(project_directory: Option<String>) -> Result<ReadResult, String>
 #[tauri::command]
 pub fn preview_npm_profile(
     request: NpmPreviewRequest,
-) -> Result<crate::domain::ChangePlan, String> {
+    preview_store: tauri::State<'_, NpmPreviewStore>,
+) -> Result<ChangePlan, String> {
     let project_directory = request
         .project_directory
         .filter(|path| !path.trim().is_empty())
@@ -74,8 +83,43 @@ pub fn preview_npm_profile(
         )]),
     };
 
-    adapter
+    let plan = adapter
         .plan_for_target(&path, scope, priority, &profile, &current_config)
+        .map_err(|error| error.message)?;
+    preview_store
+        .0
+        .lock()
+        .map_err(|_| "无法保存本次预览，请重试。".to_owned())?
+        .insert(plan.id.clone(), plan.clone());
+
+    Ok(plan)
+}
+
+#[tauri::command]
+pub fn apply_npm_preview(
+    plan_id: String,
+    preview_store: tauri::State<'_, NpmPreviewStore>,
+) -> Result<ApplyResult, String> {
+    let plan = preview_store
+        .0
+        .lock()
+        .map_err(|_| "无法读取预览，请重新预览。".to_owned())?
+        .remove(&plan_id)
+        .ok_or_else(|| "预览已失效，请重新预览。".to_owned())?;
+    let confirmed_at_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "系统时间不可用，无法确认操作。".to_owned())?
+        .as_millis() as i64;
+
+    NpmAdapter::from_system()
+        .apply(plan.confirm(confirmed_at_ms))
+        .map_err(|error| error.message)
+}
+
+#[tauri::command]
+pub fn rollback_npm_snapshot(snapshot_id: String) -> Result<Operation, String> {
+    NpmAdapter::from_system()
+        .rollback(&SnapshotRef(snapshot_id))
         .map_err(|error| error.message)
 }
 

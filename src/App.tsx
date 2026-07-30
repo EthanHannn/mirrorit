@@ -6,6 +6,8 @@ import {
   LoaderCircle,
   PackageSearch,
   RefreshCw,
+  RotateCcw,
+  Save,
   ShieldCheck,
   Terminal,
 } from "lucide-react";
@@ -50,6 +52,12 @@ interface PlannedChange {
   risk: string | null;
 }
 
+interface ApplyResult {
+  snapshot: {
+    id: string;
+  };
+}
+
 type ProfileKind = "official" | "mirror" | "custom";
 type TargetScope = "user" | "project";
 
@@ -84,6 +92,7 @@ function App() {
   const [targetScope, setTargetScope] = useState<TargetScope>("user");
   const [customRegistry, setCustomRegistry] = useState("");
   const [plan, setPlan] = useState<ChangePlan | null>(null);
+  const [snapshotId, setSnapshotId] = useState<string | null>(null);
   const [scanState, setScanState] = useState<"idle" | "loading" | "error">(
     "idle",
   );
@@ -135,6 +144,59 @@ function App() {
       ]);
       setResult(scanResult);
       setPlan(previewResult);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function applyPreview() {
+    if (
+      !plan ||
+      !window.confirm(
+        "确认应用此预览？MirrorIt 将创建本地快照后修改目标 .npmrc。",
+      )
+    ) {
+      return;
+    }
+
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      const applied = await invoke<ApplyResult>("apply_npm_preview", {
+        planId: plan.id,
+      });
+      const scanResult = await invoke<NpmReadResult>("scan_npm", {
+        projectDirectory: projectDirectory.trim() || null,
+      });
+      setResult(scanResult);
+      setSnapshotId(applied.snapshot.id);
+      setPlan(null);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function rollbackSnapshot() {
+    if (
+      !snapshotId ||
+      !window.confirm("确认从此快照恢复 npm 配置？当前目标文件将被替换。")
+    ) {
+      return;
+    }
+
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      await invoke("rollback_npm_snapshot", { snapshotId });
+      const scanResult = await invoke<NpmReadResult>("scan_npm", {
+        projectDirectory: projectDirectory.trim() || null,
+      });
+      setResult(scanResult);
+      setSnapshotId(null);
       setScanState("idle");
     } catch (error) {
       setScanState("error");
@@ -495,7 +557,7 @@ function App() {
 
             {plan ? (
               <section aria-labelledby="plan-heading" className="mt-8">
-                <div className="flex items-baseline justify-between">
+                <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
                     <p className="text-xs font-medium text-muted-foreground">
                       只读预览
@@ -507,9 +569,18 @@ function App() {
                       将要发生的变更
                     </h2>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {plan.changes.length} 项字段
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground">
+                      {plan.changes.length} 项字段
+                    </span>
+                    <Button
+                      disabled={scanState === "loading"}
+                      onClick={applyPreview}
+                    >
+                      <Save aria-hidden="true" />
+                      确认应用
+                    </Button>
+                  </div>
                 </div>
                 <div className="mt-4 divide-y divide-border border-y border-border">
                   {plan.changes.map((change) => (
@@ -547,6 +618,25 @@ function App() {
                     </article>
                   ))}
                 </div>
+              </section>
+            ) : null}
+
+            {snapshotId ? (
+              <section className="mt-6 flex flex-wrap items-center justify-between gap-3 border-l-2 border-primary bg-primary/5 px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">已创建可恢复快照</p>
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">
+                    {snapshotId}
+                  </p>
+                </div>
+                <Button
+                  disabled={scanState === "loading"}
+                  onClick={rollbackSnapshot}
+                  variant="outline"
+                >
+                  <RotateCcw aria-hidden="true" />
+                  从快照恢复
+                </Button>
               </section>
             ) : null}
           </main>
