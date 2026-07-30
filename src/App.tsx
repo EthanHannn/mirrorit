@@ -1,50 +1,52 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { CircleAlert } from "lucide-react";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
-
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
-
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <ThemeProvider>
+      <div className="min-h-svh bg-background text-foreground transition-colors duration-200 motion-reduce:transition-none">
+        <header className="flex h-14 items-center justify-between border-b border-border bg-background/85 px-5 backdrop-blur-sm">
+          <div className="flex items-center gap-3">
+            <div
+              aria-hidden="true"
+              className="grid size-7 place-items-center rounded-md bg-primary text-xs font-semibold text-primary-foreground"
+            >
+              M
+            </div>
+            <div>
+              <p className="text-sm font-semibold leading-4">MirrorIt</p>
+              <p className="mt-0.5 text-xs leading-3 text-muted-foreground">
+                本地配置工作台
+              </p>
+            </div>
+          </div>
+          <ThemeToggle />
+        </header>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+        <main className="mx-auto w-full max-w-5xl px-5 py-10">
+          <section aria-labelledby="overview-heading">
+            <p className="text-xs font-medium text-muted-foreground">总览</p>
+            <h1 id="overview-heading" className="mt-1 text-xl font-semibold">
+              配置状态
+            </h1>
+
+            <div className="mt-6 flex min-h-44 items-center gap-3 border-y border-border py-8">
+              <CircleAlert
+                aria-hidden="true"
+                className="size-5 shrink-0 text-warning"
+              />
+              <div>
+                <p className="text-sm font-medium">尚未扫描本机配置</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  工具发现完成后，此处将显示当前环境状态。
+                </p>
+              </div>
+            </div>
+          </section>
+        </main>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    </ThemeProvider>
   );
 }
 
