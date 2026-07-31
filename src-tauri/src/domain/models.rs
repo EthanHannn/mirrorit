@@ -9,6 +9,7 @@ pub enum ToolId {
     Npm,
     Maven,
     FlutterPub,
+    Go,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
