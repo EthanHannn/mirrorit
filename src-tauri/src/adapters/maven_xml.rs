@@ -72,6 +72,51 @@ pub fn replace_mirror_url(
     })
 }
 
+pub fn mirror_url(xml: &str, mirror_id: &str) -> Result<Option<String>, AdapterError> {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut buffer = Vec::new();
+    let mut inside_mirror = false;
+    let mut current_tag = String::new();
+    let mut current_mirror_id = String::new();
+
+    loop {
+        let event = reader
+            .read_event_into(&mut buffer)
+            .map_err(|error| AdapterError {
+                code: AdapterErrorCode::ParseFailure,
+                message: format!("Maven XML 无法解析：{error}"),
+            })?;
+        match &event {
+            Event::Start(start) => {
+                current_tag = String::from_utf8_lossy(start.name().as_ref()).into_owned();
+                if current_tag == "mirror" {
+                    inside_mirror = true;
+                    current_mirror_id.clear();
+                }
+            }
+            Event::Text(text) if inside_mirror && current_tag == "id" => {
+                current_mirror_id = String::from_utf8_lossy(text.as_ref()).into_owned();
+            }
+            Event::Text(text)
+                if inside_mirror && current_tag == "url" && current_mirror_id == mirror_id =>
+            {
+                return Ok(Some(String::from_utf8_lossy(text.as_ref()).into_owned()));
+            }
+            Event::End(end) => {
+                if end.name().as_ref() == b"mirror" {
+                    inside_mirror = false;
+                    current_mirror_id.clear();
+                }
+                current_tag.clear();
+            }
+            Event::Eof => return Ok(None),
+            _ => {}
+        }
+        buffer.clear();
+    }
+}
+
 fn write_error(error: std::io::Error) -> AdapterError {
     AdapterError {
         code: AdapterErrorCode::IoFailure,
@@ -93,5 +138,19 @@ mod tests {
         assert!(result.contains("https://other.example/"));
         assert!(result.contains("<!-- keep -->"));
         assert!(result.contains("<id>keep</id>"));
+    }
+
+    #[test]
+    fn reads_the_original_url_of_a_target_mirror() {
+        let xml = r#"<settings><mirrors><mirror><id>central</id><url>https://old.example/</url></mirror></mirrors></settings>"#;
+
+        assert_eq!(
+            mirror_url(xml, "central").expect("fixture should parse"),
+            Some("https://old.example/".into())
+        );
+        assert_eq!(
+            mirror_url(xml, "missing").expect("fixture should parse"),
+            None
+        );
     }
 }

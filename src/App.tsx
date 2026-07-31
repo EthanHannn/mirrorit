@@ -17,7 +17,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 
-type ConfigScope = "user" | "project" | "environment";
+type ConfigScope = "system" | "user" | "project" | "environment";
 
 interface ConfigSource {
   scope: ConfigScope;
@@ -76,6 +76,7 @@ type ProfileKind = "official" | "mirror" | "custom";
 type TargetScope = "user" | "project";
 
 const scopeLabels: Record<ConfigScope, string> = {
+  system: "全局",
   user: "用户级",
   project: "项目级",
   environment: "环境变量",
@@ -103,6 +104,10 @@ function App() {
   const [projectDirectory, setProjectDirectory] = useState("");
   const [result, setResult] = useState<NpmReadResult | null>(null);
   const [mavenResult, setMavenResult] = useState<MavenReadResult | null>(null);
+  const [mavenMirrorId, setMavenMirrorId] = useState("");
+  const [mavenMirrorUrl, setMavenMirrorUrl] = useState("");
+  const [mavenPlan, setMavenPlan] = useState<ChangePlan | null>(null);
+  const [mavenSnapshotId, setMavenSnapshotId] = useState<string | null>(null);
   const [profileKind, setProfileKind] = useState<ProfileKind>("official");
   const [targetScope, setTargetScope] = useState<TargetScope>("user");
   const [customRegistry, setCustomRegistry] = useState("");
@@ -118,6 +123,13 @@ function App() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const configEntries = Object.entries(result?.effective_config.values ?? {});
+  const mavenMirrorEntries = Object.entries(
+    mavenResult?.effective_config.values ?? {},
+  ).filter(
+    ([key, value]) =>
+      key.startsWith("mirror.") &&
+      value.sources.some((source) => source.scope === "user"),
+  );
 
   async function scan() {
     setScanState("loading");
@@ -140,7 +152,92 @@ function App() {
     setScanState("loading");
     setErrorMessage("");
     try {
+      const scanResult = await invoke<MavenReadResult>("scan_maven");
+      const mirrorIds = Object.entries(scanResult.effective_config.values)
+        .filter(
+          ([key, value]) =>
+            key.startsWith("mirror.") &&
+            value.sources.some((source) => source.scope === "user"),
+        )
+        .map(([key]) => key.slice("mirror.".length));
+      setMavenResult(scanResult);
+      setMavenMirrorId((currentMirrorId) =>
+        mirrorIds.includes(currentMirrorId)
+          ? currentMirrorId
+          : (mirrorIds[0] ?? ""),
+      );
+      setMavenPlan(null);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function previewMavenMirror() {
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      const [scanResult, previewResult] = await Promise.all([
+        invoke<MavenReadResult>("scan_maven"),
+        invoke<ChangePlan>("preview_maven_mirror_update", {
+          request: {
+            mirrorId: mavenMirrorId,
+            url: mavenMirrorUrl.trim(),
+          },
+        }),
+      ]);
+      setMavenResult(scanResult);
+      setMavenPlan(previewResult);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function applyMavenPreview() {
+    if (
+      !mavenPlan ||
+      !window.confirm(
+        "确认应用此预览？MirrorIt 将创建本地快照后更新用户级 Maven settings.xml。",
+      )
+    ) {
+      return;
+    }
+
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      const applied = await invoke<ApplyResult>("apply_maven_preview", {
+        planId: mavenPlan.id,
+      });
       setMavenResult(await invoke<MavenReadResult>("scan_maven"));
+      setMavenSnapshotId(applied.snapshot.id);
+      setMavenPlan(null);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function rollbackMavenSnapshot() {
+    if (
+      !mavenSnapshotId ||
+      !window.confirm(
+        "确认从此快照恢复 Maven settings.xml？当前目标文件将被替换。",
+      )
+    ) {
+      return;
+    }
+
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      await invoke("rollback_maven_snapshot", { snapshotId: mavenSnapshotId });
+      setMavenResult(await invoke<MavenReadResult>("scan_maven"));
+      setMavenSnapshotId(null);
       setScanState("idle");
     } catch (error) {
       setScanState("error");
@@ -271,12 +368,15 @@ function App() {
           <ThemeToggle />
         </header>
 
-        <div className="mx-auto grid w-full max-w-7xl grid-cols-[12.5rem_minmax(0,1fr)]">
-          <aside className="min-h-[calc(100svh-3.5rem)] border-r border-border px-3 py-5">
-            <p className="px-2 text-xs font-medium text-muted-foreground">
+        <div className="mx-auto grid w-full max-w-7xl grid-cols-[12.5rem_minmax(0,1fr)] max-md:grid-cols-1">
+          <aside className="min-h-[calc(100svh-3.5rem)] border-r border-border px-3 py-5 max-md:min-h-0 max-md:border-r-0 max-md:border-b max-md:px-4 max-md:py-2">
+            <p className="px-2 text-xs font-medium text-muted-foreground max-md:hidden">
               工具
             </p>
-            <nav aria-label="工具导航" className="mt-2">
+            <nav
+              aria-label="工具导航"
+              className="mt-2 max-md:mt-0 max-md:flex max-md:items-center max-md:gap-1"
+            >
               <a
                 aria-current="page"
                 className="flex h-8 items-center gap-2 rounded-md bg-primary/10 px-2 text-sm font-medium text-primary"
@@ -286,22 +386,22 @@ function App() {
                 npm
               </a>
               <a
-                className="mt-1 flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="mt-1 flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground max-md:mt-0"
                 href="#maven"
               >
                 <Terminal aria-hidden="true" className="size-3.5" />
                 Maven
               </a>
             </nav>
-            <p className="mt-8 px-2 text-xs font-medium text-muted-foreground">
+            <p className="mt-8 px-2 text-xs font-medium text-muted-foreground max-md:hidden">
               即将支持
             </p>
-            <p className="mt-2 px-2 text-xs leading-5 text-muted-foreground">
+            <p className="mt-2 px-2 text-xs leading-5 text-muted-foreground max-md:hidden">
               Maven 与 Flutter/Pub 将按相同的安全流程接入。
             </p>
           </aside>
 
-          <main id="npm" className="min-w-0 px-8 py-8">
+          <main id="npm" className="min-w-0 px-8 py-8 max-md:px-4 max-md:py-6">
             <section
               aria-labelledby="npm-heading"
               className="flex flex-wrap items-end justify-between gap-5 border-b border-border pb-7"
@@ -751,8 +851,8 @@ function App() {
                     Maven settings.xml
                   </h2>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    读取全局和用户级 mirrors、活动代理与 profile 仓库，不修改
-                    XML 文件。
+                    读取全局和用户级 mirrors、活动代理与 profile
+                    仓库；仅可预览并更新用户级已有镜像的 URL。
                   </p>
                 </div>
                 <Button
@@ -765,41 +865,197 @@ function App() {
                 </Button>
               </div>
               {mavenResult ? (
-                <div className="mt-5 divide-y divide-border border-y border-border">
-                  {Object.entries(mavenResult.effective_config.values).map(
-                    ([key, value]) => (
-                      <article
-                        className="grid gap-3 py-4 md:grid-cols-[14rem_minmax(0,1fr)]"
-                        key={key}
-                      >
-                        <p className="font-mono text-sm font-medium">{key}</p>
-                        <div className="min-w-0">
-                          <code className="block truncate rounded-md bg-muted px-2.5 py-2 font-mono text-xs">
-                            {value.value ?? "未设置"}
-                          </code>
-                          <ol className="mt-2 flex flex-wrap gap-1.5">
-                            {value.sources.map((source, index) => (
-                              <li
-                                className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground"
-                                key={`${source.location}-${index}`}
-                              >
-                                {scopeLabels[source.scope]} · {source.location}
-                                {index === value.sources.length - 1
-                                  ? " · 最终生效"
-                                  : ""}
-                              </li>
-                            ))}
-                          </ol>
+                <>
+                  <div className="mt-5 divide-y divide-border border-y border-border">
+                    {Object.entries(mavenResult.effective_config.values).map(
+                      ([key, value]) => (
+                        <article
+                          className="grid gap-3 py-4 md:grid-cols-[14rem_minmax(0,1fr)]"
+                          key={key}
+                        >
+                          <p className="font-mono text-sm font-medium">{key}</p>
+                          <div className="min-w-0">
+                            <code className="block truncate rounded-md bg-muted px-2.5 py-2 font-mono text-xs">
+                              {value.value ?? "未设置"}
+                            </code>
+                            <ol className="mt-2 flex flex-wrap gap-1.5">
+                              {value.sources.map((source, index) => (
+                                <li
+                                  className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground"
+                                  key={`${source.location}-${index}`}
+                                >
+                                  {scopeLabels[source.scope]} ·{" "}
+                                  {source.location}
+                                  {index === value.sources.length - 1
+                                    ? " · 最终生效"
+                                    : ""}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        </article>
+                      ),
+                    )}
+                    {!Object.keys(mavenResult.effective_config.values)
+                      .length ? (
+                      <p className="py-6 text-sm text-muted-foreground">
+                        未发现受支持的 Maven 配置项。
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {mavenMirrorEntries.length ? (
+                    <section
+                      aria-labelledby="maven-edit-heading"
+                      className="border-b border-border py-6"
+                    >
+                      <div className="flex flex-wrap items-end justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground">
+                            安全变更
+                          </p>
+                          <h3
+                            id="maven-edit-heading"
+                            className="mt-1 text-base font-semibold"
+                          >
+                            更新镜像 URL
+                          </h3>
                         </div>
-                      </article>
-                    ),
-                  )}
-                  {!Object.keys(mavenResult.effective_config.values).length ? (
-                    <p className="py-6 text-sm text-muted-foreground">
-                      未发现受支持的 Maven 配置项。
-                    </p>
+                        <Button
+                          disabled={
+                            scanState === "loading" ||
+                            !mavenMirrorId ||
+                            !mavenMirrorUrl.trim()
+                          }
+                          onClick={previewMavenMirror}
+                          variant="outline"
+                        >
+                          <FileDiff aria-hidden="true" />
+                          查看差异
+                        </Button>
+                      </div>
+                      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                        <label className="grid gap-1.5 text-sm font-medium">
+                          <span>目标镜像</span>
+                          <select
+                            className="h-9 rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+                            onChange={(event) =>
+                              setMavenMirrorId(event.target.value)
+                            }
+                            value={mavenMirrorId}
+                          >
+                            {mavenMirrorEntries.map(([key, value]) => (
+                              <option
+                                key={key}
+                                value={key.slice("mirror.".length)}
+                              >
+                                {key.slice("mirror.".length)} ·{" "}
+                                {value.value ?? "未设置"}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1.5 text-sm font-medium">
+                          <span>新镜像 URL</span>
+                          <input
+                            className="h-9 rounded-md border border-input bg-card px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+                            onChange={(event) =>
+                              setMavenMirrorUrl(event.target.value)
+                            }
+                            placeholder="https://repo.example.com/maven/"
+                            value={mavenMirrorUrl}
+                          />
+                        </label>
+                      </div>
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        只接受未含凭据的 HTTPS 地址。预览会复核 XML
+                        结构和文件校验和，不会写入文件。
+                      </p>
+                    </section>
                   ) : null}
-                </div>
+
+                  {mavenPlan ? (
+                    <section
+                      aria-labelledby="maven-plan-heading"
+                      className="border-b border-border py-6"
+                    >
+                      <div className="flex flex-wrap items-end justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground">
+                            只读预览
+                          </p>
+                          <h3
+                            id="maven-plan-heading"
+                            className="mt-1 text-base font-semibold"
+                          >
+                            将要发生的变更
+                          </h3>
+                        </div>
+                        <Button
+                          disabled={scanState === "loading"}
+                          onClick={applyMavenPreview}
+                        >
+                          <Save aria-hidden="true" />
+                          确认应用
+                        </Button>
+                      </div>
+                      <div className="mt-4 divide-y divide-border border-y border-border">
+                        {mavenPlan.changes.map((change) => (
+                          <article
+                            className="py-4"
+                            key={`${change.file}-${change.field}`}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="font-mono text-sm font-medium">
+                                {change.field}
+                              </p>
+                              <p className="truncate font-mono text-xs text-muted-foreground">
+                                {change.file}
+                              </p>
+                            </div>
+                            <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+                              <div className="rounded-md bg-muted px-2.5 py-2">
+                                <p className="mb-1 text-muted-foreground">
+                                  当前值
+                                </p>
+                                <code className="block truncate font-mono">
+                                  {change.previous_value ?? "未设置"}
+                                </code>
+                              </div>
+                              <div className="rounded-md bg-primary/5 px-2.5 py-2">
+                                <p className="mb-1 text-primary">新值</p>
+                                <code className="block truncate font-mono">
+                                  {change.next_value ?? "移除"}
+                                </code>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {mavenSnapshotId ? (
+                    <section className="mt-6 flex flex-wrap items-center justify-between gap-3 border-l-2 border-primary bg-primary/5 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium">
+                          已创建 Maven 可恢复快照
+                        </p>
+                        <p className="mt-1 font-mono text-xs text-muted-foreground">
+                          {mavenSnapshotId}
+                        </p>
+                      </div>
+                      <Button
+                        disabled={scanState === "loading"}
+                        onClick={rollbackMavenSnapshot}
+                        variant="outline"
+                      >
+                        <RotateCcw aria-hidden="true" />
+                        从快照恢复
+                      </Button>
+                    </section>
+                  ) : null}
+                </>
               ) : null}
             </section>
           </main>

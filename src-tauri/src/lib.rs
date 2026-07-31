@@ -6,8 +6,12 @@ pub mod domain;
 pub fn run() {
     tauri::Builder::default()
         .manage(commands::npm::NpmPreviewStore::default())
+        .manage(commands::maven::MavenPreviewStore::default())
         .invoke_handler(tauri::generate_handler![
             commands::maven::scan_maven,
+            commands::maven::preview_maven_mirror_update,
+            commands::maven::apply_maven_preview,
+            commands::maven::rollback_maven_snapshot,
             commands::npm::scan_npm,
             commands::npm::preview_npm_profile,
             commands::npm::apply_npm_preview,
