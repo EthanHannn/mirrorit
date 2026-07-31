@@ -14,6 +14,7 @@ pub mod maven;
 pub mod maven_xml;
 pub mod npm;
 pub mod pnpm;
+pub mod yarn;
 
 pub struct PlanRequest<'a> {
     pub profile: &'a Profile,
