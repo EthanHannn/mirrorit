@@ -25,3 +25,6 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 reqwest = { version = "0.13", features = ["blocking"] }
 quick-xml = { version = "0.41", features = ["serialize"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"

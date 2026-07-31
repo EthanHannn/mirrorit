@@ -363,6 +363,7 @@ impl NpmAdapter {
         Ok(ChangePlan {
             id: format!("npm-{}-{}", profile.id, scope_label(scope)),
             tool: self.tool(),
+            target_checksums: BTreeMap::new(),
             file_checksums: BTreeMap::from([(file, file_checksum)]),
             changes,
         })

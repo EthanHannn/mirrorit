@@ -43,6 +43,7 @@ type FlutterPubReadResult = NpmReadResult;
 
 interface ChangePlan {
   id: string;
+  target_checksums: Record<string, string>;
   file_checksums: Record<string, string>;
   changes: PlannedChange[];
 }
@@ -107,6 +108,14 @@ function App() {
   const [mavenResult, setMavenResult] = useState<MavenReadResult | null>(null);
   const [flutterPubResult, setFlutterPubResult] =
     useState<FlutterPubReadResult | null>(null);
+  const [flutterPubProfile, setFlutterPubProfile] = useState<
+    "official" | "custom"
+  >("official");
+  const [flutterPubHostedUrl, setFlutterPubHostedUrl] = useState("");
+  const [flutterPubPlan, setFlutterPubPlan] = useState<ChangePlan | null>(null);
+  const [flutterPubSnapshotId, setFlutterPubSnapshotId] = useState<
+    string | null
+  >(null);
   const [mavenMirrorId, setMavenMirrorId] = useState("");
   const [mavenMirrorUrl, setMavenMirrorUrl] = useState("");
   const [mavenPlan, setMavenPlan] = useState<ChangePlan | null>(null);
@@ -186,6 +195,91 @@ function App() {
           projectDirectory: projectDirectory.trim() || null,
         }),
       );
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function previewFlutterPubHosted() {
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      const [scanResult, previewResult] = await Promise.all([
+        invoke<FlutterPubReadResult>("scan_flutter_pub", {
+          projectDirectory: projectDirectory.trim() || null,
+        }),
+        invoke<ChangePlan>("preview_flutter_pub_hosted_update", {
+          request: {
+            hostedUrl:
+              flutterPubProfile === "official"
+                ? null
+                : flutterPubHostedUrl.trim(),
+          },
+        }),
+      ]);
+      setFlutterPubResult(scanResult);
+      setFlutterPubPlan(previewResult);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function applyFlutterPubPreview() {
+    if (
+      !flutterPubPlan ||
+      !window.confirm(
+        "确认应用此预览？MirrorIt 将创建本地快照后更新用户级 PUB_HOSTED_URL。重新启动 Flutter、终端和 MirrorIt 后才会生效。",
+      )
+    ) {
+      return;
+    }
+
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      const applied = await invoke<ApplyResult>("apply_flutter_pub_preview", {
+        planId: flutterPubPlan.id,
+      });
+      setFlutterPubResult(
+        await invoke<FlutterPubReadResult>("scan_flutter_pub", {
+          projectDirectory: projectDirectory.trim() || null,
+        }),
+      );
+      setFlutterPubSnapshotId(applied.snapshot.id);
+      setFlutterPubPlan(null);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function rollbackFlutterPubSnapshot() {
+    if (
+      !flutterPubSnapshotId ||
+      !window.confirm(
+        "确认从此快照恢复 PUB_HOSTED_URL？重新启动 Flutter、终端和 MirrorIt 后才会生效。",
+      )
+    ) {
+      return;
+    }
+
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      await invoke("rollback_flutter_pub_snapshot", {
+        snapshotId: flutterPubSnapshotId,
+      });
+      setFlutterPubResult(
+        await invoke<FlutterPubReadResult>("scan_flutter_pub", {
+          projectDirectory: projectDirectory.trim() || null,
+        }),
+      );
+      setFlutterPubSnapshotId(null);
       setScanState("idle");
     } catch (error) {
       setScanState("error");
@@ -1167,6 +1261,170 @@ function App() {
                     </section>
                   ) : null}
                 </>
+              ) : null}
+
+              <section
+                aria-labelledby="flutter-pub-edit-heading"
+                className="border-b border-border py-6"
+              >
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      安全变更
+                    </p>
+                    <h3
+                      id="flutter-pub-edit-heading"
+                      className="mt-1 text-base font-semibold"
+                    >
+                      用户级 hosted 源
+                    </h3>
+                  </div>
+                  <Button
+                    disabled={
+                      scanState === "loading" ||
+                      (flutterPubProfile === "custom" &&
+                        !flutterPubHostedUrl.trim())
+                    }
+                    onClick={previewFlutterPubHosted}
+                    variant="outline"
+                  >
+                    <FileDiff aria-hidden="true" />
+                    查看差异
+                  </Button>
+                </div>
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  <button
+                    aria-pressed={flutterPubProfile === "official"}
+                    className={
+                      flutterPubProfile === "official"
+                        ? "border border-primary bg-primary/5 p-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+                        : "border border-border bg-card p-3 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30"
+                    }
+                    onClick={() => setFlutterPubProfile("official")}
+                    type="button"
+                  >
+                    <p className="text-sm font-medium">官方源</p>
+                    <code className="mt-2 block font-mono text-xs text-muted-foreground">
+                      https://pub.dev
+                    </code>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      移除用户级 PUB_HOSTED_URL 覆盖。
+                    </p>
+                  </button>
+                  <button
+                    aria-pressed={flutterPubProfile === "custom"}
+                    className={
+                      flutterPubProfile === "custom"
+                        ? "border border-primary bg-primary/5 p-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+                        : "border border-border bg-card p-3 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/30"
+                    }
+                    onClick={() => setFlutterPubProfile("custom")}
+                    type="button"
+                  >
+                    <p className="text-sm font-medium">自定义源</p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      设置用户级未含凭据的 HTTPS hosted 源。
+                    </p>
+                  </button>
+                </div>
+                {flutterPubProfile === "custom" ? (
+                  <label className="mt-4 grid gap-1.5 text-sm font-medium">
+                    <span>自定义 hosted URL</span>
+                    <input
+                      className="h-9 rounded-md border border-input bg-card px-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+                      onChange={(event) =>
+                        setFlutterPubHostedUrl(event.target.value)
+                      }
+                      placeholder="https://packages.example.com/"
+                      value={flutterPubHostedUrl}
+                    />
+                  </label>
+                ) : null}
+                <p className="mt-3 text-xs text-muted-foreground">
+                  不会修改 pubspec.yaml、锁文件或 .dart_tool。应用后需重新启动
+                  Flutter、终端和 MirrorIt。
+                </p>
+              </section>
+
+              {flutterPubPlan ? (
+                <section
+                  aria-labelledby="flutter-pub-plan-heading"
+                  className="border-b border-border py-6"
+                >
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground">
+                        只读预览
+                      </p>
+                      <h3
+                        id="flutter-pub-plan-heading"
+                        className="mt-1 text-base font-semibold"
+                      >
+                        将要发生的变更
+                      </h3>
+                    </div>
+                    <Button
+                      disabled={scanState === "loading"}
+                      onClick={applyFlutterPubPreview}
+                    >
+                      <Save aria-hidden="true" />
+                      确认应用
+                    </Button>
+                  </div>
+                  {flutterPubPlan.changes.map((change) => (
+                    <article
+                      className="mt-4 border-y border-border py-4"
+                      key={`${change.file}-${change.field}`}
+                    >
+                      <p className="font-mono text-sm font-medium">
+                        {change.field}
+                      </p>
+                      <p className="mt-1 truncate font-mono text-xs text-muted-foreground">
+                        {change.file}
+                      </p>
+                      <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
+                        <div className="rounded-md bg-muted px-2.5 py-2">
+                          <p className="mb-1 text-muted-foreground">当前值</p>
+                          <code className="block truncate font-mono">
+                            {change.previous_value ?? "未设置"}
+                          </code>
+                        </div>
+                        <div className="rounded-md bg-primary/5 px-2.5 py-2">
+                          <p className="mb-1 text-primary">新值</p>
+                          <code className="block truncate font-mono">
+                            {change.next_value ?? "移除覆盖"}
+                          </code>
+                        </div>
+                      </div>
+                      {change.risk ? (
+                        <p className="mt-3 border-l-2 border-warning pl-2 text-xs text-warning">
+                          {change.risk}
+                        </p>
+                      ) : null}
+                    </article>
+                  ))}
+                </section>
+              ) : null}
+
+              {flutterPubSnapshotId ? (
+                <section className="mt-6 flex flex-wrap items-center justify-between gap-3 border-l-2 border-primary bg-primary/5 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium">
+                      已创建 Flutter/Pub 可恢复快照
+                    </p>
+                    <p className="mt-1 font-mono text-xs text-muted-foreground">
+                      {flutterPubSnapshotId}
+                    </p>
+                  </div>
+                  <Button
+                    disabled={scanState === "loading"}
+                    onClick={rollbackFlutterPubSnapshot}
+                    variant="outline"
+                  >
+                    <RotateCcw aria-hidden="true" />
+                    从快照恢复
+                  </Button>
+                </section>
               ) : null}
             </section>
           </main>

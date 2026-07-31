@@ -104,6 +104,7 @@ mod tests {
             Ok(ChangePlan {
                 id: "plan-1".into(),
                 tool: self.tool(),
+                target_checksums: BTreeMap::new(),
                 file_checksums: BTreeMap::from([(
                     "C:/Users/example/.npmrc".into(),
                     "fixture-checksum".into(),

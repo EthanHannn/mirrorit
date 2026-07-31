@@ -110,6 +110,8 @@ pub struct PlannedChange {
 pub struct ChangePlan {
     pub id: String,
     pub tool: ToolId,
+    #[serde(default)]
+    pub target_checksums: BTreeMap<String, String>,
     pub file_checksums: BTreeMap<String, String>,
     pub changes: Vec<PlannedChange>,
 }

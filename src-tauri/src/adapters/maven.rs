@@ -120,6 +120,7 @@ impl MavenAdapter {
         Ok(ChangePlan {
             id: format!("maven-mirror-{mirror_id}"),
             tool: self.tool(),
+            target_checksums: BTreeMap::new(),
             file_checksums: BTreeMap::from([(
                 path.display().to_string(),
                 format!("{:x}", Sha256::digest(xml.as_bytes())),
