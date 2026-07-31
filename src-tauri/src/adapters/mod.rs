@@ -6,6 +6,7 @@ use crate::domain::{
 
 pub type AdapterResult<T> = Result<T, AdapterError>;
 
+pub mod cargo;
 pub mod flutter_pub;
 pub mod go;
 pub mod maven;

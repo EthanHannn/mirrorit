@@ -41,6 +41,7 @@ interface NpmReadResult {
 type MavenReadResult = NpmReadResult;
 type FlutterPubReadResult = NpmReadResult;
 type GoReadResult = NpmReadResult;
+type CargoReadResult = NpmReadResult;
 
 interface ChangePlan {
   id: string;
@@ -110,6 +111,7 @@ function App() {
   const [flutterPubResult, setFlutterPubResult] =
     useState<FlutterPubReadResult | null>(null);
   const [goResult, setGoResult] = useState<GoReadResult | null>(null);
+  const [cargoResult, setCargoResult] = useState<CargoReadResult | null>(null);
   const [flutterPubProfile, setFlutterPubProfile] = useState<
     "official" | "custom"
   >("official");
@@ -209,6 +211,22 @@ function App() {
     setErrorMessage("");
     try {
       setGoResult(await invoke<GoReadResult>("scan_go"));
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function scanCargo() {
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      setCargoResult(
+        await invoke<CargoReadResult>("scan_cargo", {
+          projectDirectory: projectDirectory.trim() || null,
+        }),
+      );
       setScanState("idle");
     } catch (error) {
       setScanState("error");
@@ -533,12 +551,19 @@ function App() {
                 <Terminal aria-hidden="true" className="size-3.5" />
                 Go
               </a>
+              <a
+                className="mt-1 flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground max-md:mt-0"
+                href="#cargo"
+              >
+                <Terminal aria-hidden="true" className="size-3.5" />
+                Cargo
+              </a>
             </nav>
             <p className="mt-8 px-2 text-xs font-medium text-muted-foreground max-md:hidden">
               即将支持
             </p>
             <p className="mt-2 px-2 text-xs leading-5 text-muted-foreground max-md:hidden">
-              Go 已支持只读扫描；写入能力需先完成独立的安全设计。
+              Go 与 Cargo 已支持只读扫描；写入能力需先完成独立的安全设计。
             </p>
           </aside>
 
@@ -1282,6 +1307,94 @@ function App() {
 
               <p className="mt-5 border-l-2 border-border px-4 py-3 text-xs text-muted-foreground">
                 此阶段不会修改 GOENV、环境变量、模块缓存或项目文件。
+              </p>
+            </section>
+
+            <section
+              id="cargo"
+              aria-labelledby="cargo-heading"
+              className="mt-12 border-t border-border pt-8"
+            >
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    工具配置 / 只读扫描
+                  </p>
+                  <h2 id="cargo-heading" className="mt-1 text-xl font-semibold">
+                    Cargo registry
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    查看 crates.io 替换、命名 registry、默认 registry 与 HTTP
+                    代理的来源轨迹。
+                  </p>
+                </div>
+                <Button
+                  disabled={scanState === "loading"}
+                  onClick={scanCargo}
+                  variant="outline"
+                >
+                  <RefreshCw aria-hidden="true" />
+                  扫描 Cargo
+                </Button>
+              </div>
+
+              {cargoResult ? (
+                <>
+                  <div className="mt-5 divide-y divide-border border-y border-border">
+                    {Object.entries(cargoResult.effective_config.values).map(
+                      ([key, value]) => (
+                        <article
+                          className="grid gap-3 py-4 md:grid-cols-[14rem_minmax(0,1fr)]"
+                          key={key}
+                        >
+                          <p className="font-mono text-sm font-medium">{key}</p>
+                          <div className="min-w-0">
+                            <code className="block truncate rounded-md bg-muted px-2.5 py-2 font-mono text-xs">
+                              {value.value || "未设置"}
+                            </code>
+                            <ol className="mt-2 flex flex-wrap gap-1.5">
+                              {value.sources.map((source, index) => (
+                                <li
+                                  className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground"
+                                  key={`${source.location}-${index}`}
+                                >
+                                  {scopeLabels[source.scope]} ·{" "}
+                                  {source.location}
+                                  {index === value.sources.length - 1
+                                    ? " · 最终生效"
+                                    : ""}
+                                  {source.sensitive ? " · 凭据已掩盖" : ""}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        </article>
+                      ),
+                    )}
+                    {!Object.keys(cargoResult.effective_config.values)
+                      .length ? (
+                      <p className="py-6 text-sm text-muted-foreground">
+                        未发现受支持的 Cargo 配置项。
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {cargoResult.diagnostics.length ? (
+                    <section className="mt-5 border-l-2 border-warning bg-warning/5 px-4 py-3">
+                      <h3 className="text-sm font-medium">需要注意</h3>
+                      <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
+                        {cargoResult.diagnostics.map((diagnostic) => (
+                          <li key={diagnostic}>{diagnostic}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+                </>
+              ) : null}
+
+              <p className="mt-5 border-l-2 border-border px-4 py-3 text-xs text-muted-foreground">
+                只读取用户级与明确选择项目的配置；不会读取
+                token、凭据文件、缓存或 Cargo.lock。
               </p>
             </section>
 
