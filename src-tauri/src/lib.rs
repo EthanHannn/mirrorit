@@ -8,6 +8,7 @@ pub fn run() {
         .manage(commands::npm::NpmPreviewStore::default())
         .manage(commands::maven::MavenPreviewStore::default())
         .invoke_handler(tauri::generate_handler![
+            commands::flutter_pub::scan_flutter_pub,
             commands::maven::scan_maven,
             commands::maven::preview_maven_mirror_update,
             commands::maven::apply_maven_preview,

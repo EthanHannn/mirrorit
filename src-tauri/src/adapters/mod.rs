@@ -6,6 +6,7 @@ use crate::domain::{
 
 pub type AdapterResult<T> = Result<T, AdapterError>;
 
+pub mod flutter_pub;
 pub mod maven;
 pub mod maven_xml;
 pub mod npm;
