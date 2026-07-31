@@ -12,6 +12,7 @@ pub enum ToolId {
     Go,
     Cargo,
     Docker,
+    Pnpm,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -13,6 +13,7 @@ pub mod go;
 pub mod maven;
 pub mod maven_xml;
 pub mod npm;
+pub mod pnpm;
 
 pub struct PlanRequest<'a> {
     pub profile: &'a Profile,
