@@ -6,4 +6,5 @@ pub mod maven;
 pub mod npm;
 pub mod pip;
 pub mod pnpm;
+pub mod profiles;
 pub mod yarn;

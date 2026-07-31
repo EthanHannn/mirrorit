@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   Activity,
   CircleAlert,
+  Download,
   FileDiff,
   FolderSearch,
   LoaderCircle,
@@ -81,6 +82,17 @@ interface HealthCheckResult {
   message: string | null;
 }
 
+interface ProfileExportDocument {
+  format: "mirrorit-profile";
+  version: number;
+  profiles: Array<{
+    tool: "npm";
+    id: string;
+    name: string;
+    values: Record<string, string>;
+  }>;
+}
+
 type ProfileKind = "official" | "mirror" | "custom";
 type TargetScope = "user" | "project";
 
@@ -143,6 +155,9 @@ function App() {
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
   const [healthTarget, setHealthTarget] = useState("");
   const [healthResult, setHealthResult] = useState<HealthCheckResult | null>(
+    null,
+  );
+  const [exportedProfileName, setExportedProfileName] = useState<string | null>(
     null,
   );
   const [scanState, setScanState] = useState<"idle" | "loading" | "error">(
@@ -459,14 +474,7 @@ function App() {
   }
 
   async function previewProfile() {
-    const selectedProfile =
-      profileKind === "custom"
-        ? {
-            id: "custom-registry",
-            name: "自定义源",
-            registry: customRegistry.trim(),
-          }
-        : profileDefinitions[profileKind];
+    const selectedProfile = selectedNpmProfile();
 
     setScanState("loading");
     setErrorMessage("");
@@ -485,6 +493,44 @@ function App() {
       ]);
       setResult(scanResult);
       setPlan(previewResult);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  function selectedNpmProfile() {
+    return profileKind === "custom"
+      ? {
+          id: "custom-registry",
+          name: "自定义源",
+          registry: customRegistry.trim(),
+        }
+      : profileDefinitions[profileKind];
+  }
+
+  async function exportNpmProfile() {
+    const selectedProfile = selectedNpmProfile();
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      const exportDocument = await invoke<ProfileExportDocument>(
+        "export_npm_profile",
+        {
+          request: { profile: selectedProfile },
+        },
+      );
+      const blob = new Blob([`${JSON.stringify(exportDocument, null, 2)}\n`], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${exportDocument.profiles[0].id}.mirrorit-profile.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setExportedProfileName(exportDocument.profiles[0].name);
       setScanState("idle");
     } catch (error) {
       setScanState("error");
@@ -783,14 +829,24 @@ function App() {
                     预览配置档
                   </h2>
                 </div>
-                <Button
-                  disabled={scanState === "loading"}
-                  onClick={previewProfile}
-                  variant="outline"
-                >
-                  <FileDiff aria-hidden="true" />
-                  查看差异
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    disabled={scanState === "loading"}
+                    onClick={exportNpmProfile}
+                    variant="outline"
+                  >
+                    <Download aria-hidden="true" />
+                    导出 JSON
+                  </Button>
+                  <Button
+                    disabled={scanState === "loading"}
+                    onClick={previewProfile}
+                    variant="outline"
+                  >
+                    <FileDiff aria-hidden="true" />
+                    查看差异
+                  </Button>
+                </div>
               </div>
 
               <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -874,6 +930,12 @@ function App() {
                   </select>
                 </label>
               </div>
+
+              {exportedProfileName ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  已导出 {exportedProfileName} 的非敏感 JSON 配置档。
+                </p>
+              ) : null}
             </section>
 
             {scanState === "error" ? (
