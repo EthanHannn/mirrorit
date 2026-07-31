@@ -7,7 +7,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Output},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -143,11 +143,7 @@ impl ConfigAdapter for MavenAdapter {
         ToolId::Maven
     }
     fn detect(&self, _: &DetectionContext) -> AdapterResult<ToolDetection> {
-        let version = Command::new("mvn")
-            .arg("--version")
-            .output()
-            .ok()
-            .filter(|output| output.status.success())
+        let version = maven_version_output()
             .and_then(|output| String::from_utf8(output.stdout).ok())
             .and_then(|output| output.lines().next().map(str::to_owned));
 
@@ -166,10 +162,12 @@ impl ConfigAdapter for MavenAdapter {
     fn read(&self, _: &ToolContext) -> AdapterResult<ReadResult> {
         let mut values = BTreeMap::new();
         let mut diagnostics = Vec::new();
+        let mut read_settings = false;
         for (scope, priority, path) in self.settings_paths() {
             match fs::read_to_string(&path) {
                 Ok(xml) => match from_str::<Settings>(&xml) {
                     Ok(settings) => {
+                        read_settings = true;
                         for mirror in settings.mirrors.items {
                             let value = format!("{} (mirrorOf: {})", mirror.url, mirror.mirror_of);
                             let source = ConfigSource {
@@ -224,6 +222,12 @@ impl ConfigAdapter for MavenAdapter {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 Err(error) => diagnostics.push(format!("无法读取 {path}：{error}")),
             }
+        }
+        if !read_settings {
+            diagnostics.push(
+                "未读取到 Maven 全局或用户级 settings.xml。请确认 Maven 已安装且配置文件可访问。"
+                    .into(),
+            );
         }
         Ok(ReadResult {
             effective_config: EffectiveConfig {
@@ -454,14 +458,21 @@ fn system_settings_path(environment: &BTreeMap<String, String>) -> Option<PathBu
 }
 
 fn maven_home_from_command() -> Option<PathBuf> {
-    let output = Command::new("mvn").arg("--version").output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
+    let output = maven_version_output()?;
     String::from_utf8_lossy(&output.stdout)
         .lines()
         .find_map(|line| line.strip_prefix("Maven home: "))
         .map(|home| PathBuf::from(home.trim()))
+}
+
+fn maven_version_output() -> Option<Output> {
+    ["mvn.cmd", "mvn"].into_iter().find_map(|command| {
+        Command::new(command)
+            .arg("--version")
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+    })
 }
 
 fn user_settings_path(environment: &BTreeMap<String, String>) -> Option<PathBuf> {
@@ -560,6 +571,21 @@ mod tests {
         assert_eq!(
             settings.profiles.items[0].repositories.items[0].url,
             "https://repo.example/"
+        );
+    }
+
+    #[test]
+    fn parses_a_namespaced_maven_settings_file() {
+        let settings: Settings = from_str(
+            r#"<?xml version="1.0"?><settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"><localRepository>C:\maven\repo</localRepository><mirrors><mirror><id>aliyunmaven</id><mirrorOf>central</mirrorOf><name>阿里云公共仓库</name><url>https://maven.aliyun.com/repository/public</url></mirror></mirrors></settings>"#,
+        )
+        .expect("namespaced Maven settings should parse");
+
+        assert_eq!(settings.mirrors.items.len(), 1);
+        assert_eq!(settings.mirrors.items[0].id, "aliyunmaven");
+        assert_eq!(
+            settings.mirrors.items[0].url,
+            "https://maven.aliyun.com/repository/public"
         );
     }
 
