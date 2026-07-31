@@ -93,6 +93,14 @@ interface ProfileExportDocument {
   }>;
 }
 
+interface NpmProfileImportPreview {
+  id: string;
+  name: string;
+  current_registry: string;
+  imported_registry: string;
+  changed: boolean;
+}
+
 type ProfileKind = "official" | "mirror" | "custom";
 type TargetScope = "user" | "project";
 
@@ -160,6 +168,10 @@ function App() {
   const [exportedProfileName, setExportedProfileName] = useState<string | null>(
     null,
   );
+  const [importContent, setImportContent] = useState<string | null>(null);
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [importPreview, setImportPreview] =
+    useState<NpmProfileImportPreview | null>(null);
   const [scanState, setScanState] = useState<"idle" | "loading" | "error">(
     "idle",
   );
@@ -531,6 +543,47 @@ function App() {
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 0);
       setExportedProfileName(exportDocument.profiles[0].name);
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function selectImportFile(file: File | undefined) {
+    setImportPreview(null);
+    setErrorMessage("");
+    if (!file) {
+      setImportContent(null);
+      setImportFileName(null);
+      return;
+    }
+    try {
+      setImportContent(await file.text());
+      setImportFileName(file.name);
+    } catch {
+      setImportContent(null);
+      setImportFileName(null);
+      setErrorMessage("无法读取所选配置档文件。");
+    }
+  }
+
+  async function previewImportedProfile() {
+    if (!importContent) {
+      return;
+    }
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      const currentProfile = selectedNpmProfile();
+      setImportPreview(
+        await invoke<NpmProfileImportPreview>("preview_npm_profile_import", {
+          request: {
+            content: importContent,
+            currentRegistry: currentProfile.registry,
+          },
+        }),
+      );
       setScanState("idle");
     } catch (error) {
       setScanState("error");
@@ -936,6 +989,62 @@ function App() {
                   已导出 {exportedProfileName} 的非敏感 JSON 配置档。
                 </p>
               ) : null}
+
+              <div className="mt-5 border-t border-border pt-5">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">
+                      导入预览
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      仅比较所选 JSON 配置档，不会应用任何更改。
+                    </p>
+                  </div>
+                  <Button
+                    disabled={!importContent || scanState === "loading"}
+                    onClick={previewImportedProfile}
+                    variant="outline"
+                  >
+                    <FileDiff aria-hidden="true" />
+                    预览导入
+                  </Button>
+                </div>
+                <label className="mt-3 grid gap-1.5 text-sm font-medium">
+                  <span>导入配置档</span>
+                  <input
+                    accept=".json,application/json"
+                    className="block w-full text-sm text-muted-foreground file:mr-3 file:h-9 file:rounded-md file:border-0 file:bg-muted file:px-3 file:text-sm file:font-medium file:text-foreground hover:file:bg-muted/80"
+                    onChange={(event) =>
+                      void selectImportFile(event.target.files?.[0])
+                    }
+                    type="file"
+                  />
+                </label>
+                {importFileName ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    已选择 {importFileName}，尚未应用。
+                  </p>
+                ) : null}
+                {importPreview ? (
+                  <div className="mt-3 grid gap-2 border-l-2 border-warning bg-warning/5 px-4 py-3 text-sm">
+                    <p className="font-medium">
+                      {importPreview.name}{" "}
+                      {importPreview.changed
+                        ? "将替换当前 registry"
+                        : "与当前 registry 相同"}
+                    </p>
+                    <code className="truncate font-mono text-xs text-muted-foreground">
+                      当前：{importPreview.current_registry}
+                    </code>
+                    <code className="truncate font-mono text-xs text-muted-foreground">
+                      导入：{importPreview.imported_registry}
+                    </code>
+                    <p className="text-xs text-muted-foreground">
+                      此预览未生成写入计划，未修改任何配置。
+                    </p>
+                  </div>
+                ) : null}
+              </div>
             </section>
 
             {scanState === "error" ? (
