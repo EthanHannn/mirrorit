@@ -82,9 +82,12 @@ pub struct MavenAdapter {
 impl MavenAdapter {
     pub fn from_system() -> Self {
         let environment = std::env::vars().collect::<BTreeMap<_, _>>();
+        let system_settings_path = system_settings_path(&environment).or_else(|| {
+            maven_home_from_command().map(|home| home.join("conf").join("settings.xml"))
+        });
 
         Self {
-            system_settings_path: system_settings_path(&environment),
+            system_settings_path,
             user_settings_path: user_settings_path(&environment),
             snapshot_directory: None,
         }
@@ -448,6 +451,17 @@ fn system_settings_path(environment: &BTreeMap<String, String>) -> Option<PathBu
         .get("M2_HOME")
         .or_else(|| environment.get("MAVEN_HOME"))
         .map(|home| Path::new(home).join("conf/settings.xml"))
+}
+
+fn maven_home_from_command() -> Option<PathBuf> {
+    let output = Command::new("mvn").arg("--version").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix("Maven home: "))
+        .map(|home| PathBuf::from(home.trim()))
 }
 
 fn user_settings_path(environment: &BTreeMap<String, String>) -> Option<PathBuf> {

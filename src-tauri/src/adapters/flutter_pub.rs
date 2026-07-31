@@ -233,14 +233,21 @@ impl ConfigAdapter for FlutterPubAdapter {
     fn read(&self, context: &ToolContext) -> AdapterResult<ReadResult> {
         let mut values = BTreeMap::new();
         let mut diagnostics = Vec::new();
-        add_value(
-            &mut values,
-            "hosted.default".into(),
-            DEFAULT_HOSTED_URL.into(),
-            ConfigScope::System,
-            "Dart Pub 默认 hosted 源",
-            SYSTEM_PRIORITY,
-        );
+        let installed = ["flutter", "dart"]
+            .into_iter()
+            .any(|command| command_version(command).is_some());
+        if installed {
+            add_value(
+                &mut values,
+                "hosted.default".into(),
+                DEFAULT_HOSTED_URL.into(),
+                ConfigScope::System,
+                "Dart Pub 默认 hosted 源",
+                SYSTEM_PRIORITY,
+            );
+        } else {
+            diagnostics.push("未检测到 Flutter 或 Dart，未将默认 hosted 源视为本机配置。".into());
+        }
 
         match self.hosted_store.read() {
             Ok(Some(value)) => add_value(
@@ -710,7 +717,7 @@ mod tests {
             result.effective_config.values["hosted.default"]
                 .sources
                 .len(),
-            2
+            1
         );
         assert_eq!(
             result.effective_config.values["proxy.https"]
@@ -799,7 +806,7 @@ dependency_overrides:
                 .as_deref(),
             Some("localhost,127.0.0.1")
         );
-        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics.len(), 2);
 
         fs::remove_dir_all(root).expect("fixture directory should be removed");
     }
