@@ -10,6 +10,7 @@ pub fn run() {
         .manage(commands::maven::MavenPreviewStore::default())
         .invoke_handler(tauri::generate_handler![
             commands::cargo::scan_cargo,
+            commands::docker::scan_docker,
             commands::go::scan_go,
             commands::flutter_pub::scan_flutter_pub,
             commands::flutter_pub::preview_flutter_pub_hosted_update,

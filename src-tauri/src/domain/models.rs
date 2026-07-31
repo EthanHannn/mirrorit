@@ -11,6 +11,7 @@ pub enum ToolId {
     FlutterPub,
     Go,
     Cargo,
+    Docker,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
