@@ -13,6 +13,7 @@ pub mod go;
 pub mod maven;
 pub mod maven_xml;
 pub mod npm;
+pub mod pip;
 pub mod pnpm;
 pub mod yarn;
 

@@ -585,6 +585,7 @@ fn scope_label(scope: ConfigScope) -> &'static str {
         ConfigScope::System => "system",
         ConfigScope::User => "user",
         ConfigScope::Project => "project",
+        ConfigScope::VirtualEnvironment => "virtual_environment",
         ConfigScope::Environment => "environment",
     }
 }

@@ -17,7 +17,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 
-type ConfigScope = "system" | "user" | "project" | "environment";
+type ConfigScope =
+  "system" | "user" | "project" | "virtual_environment" | "environment";
 
 interface ConfigSource {
   scope: ConfigScope;
@@ -45,6 +46,7 @@ type CargoReadResult = NpmReadResult;
 type DockerReadResult = NpmReadResult;
 type PnpmReadResult = NpmReadResult;
 type YarnReadResult = NpmReadResult;
+type PipReadResult = NpmReadResult;
 
 interface ChangePlan {
   id: string;
@@ -86,6 +88,7 @@ const scopeLabels: Record<ConfigScope, string> = {
   system: "全局",
   user: "用户级",
   project: "项目级",
+  virtual_environment: "虚拟环境",
   environment: "环境变量",
 };
 
@@ -120,6 +123,7 @@ function App() {
   );
   const [pnpmResult, setPnpmResult] = useState<PnpmReadResult | null>(null);
   const [yarnResult, setYarnResult] = useState<YarnReadResult | null>(null);
+  const [pipResult, setPipResult] = useState<PipReadResult | null>(null);
   const [flutterPubProfile, setFlutterPubProfile] = useState<
     "official" | "custom"
   >("official");
@@ -279,6 +283,18 @@ function App() {
           projectDirectory: projectDirectory.trim() || null,
         }),
       );
+      setScanState("idle");
+    } catch (error) {
+      setScanState("error");
+      setErrorMessage(String(error));
+    }
+  }
+
+  async function scanPip() {
+    setScanState("loading");
+    setErrorMessage("");
+    try {
+      setPipResult(await invoke<PipReadResult>("scan_pip"));
       setScanState("idle");
     } catch (error) {
       setScanState("error");
@@ -631,12 +647,19 @@ function App() {
                 <Terminal aria-hidden="true" className="size-3.5" />
                 Yarn
               </a>
+              <a
+                className="mt-1 flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground max-md:mt-0"
+                href="#pip"
+              >
+                <Terminal aria-hidden="true" className="size-3.5" />
+                pip
+              </a>
             </nav>
             <p className="mt-8 px-2 text-xs font-medium text-muted-foreground max-md:hidden">
               即将支持
             </p>
             <p className="mt-2 px-2 text-xs leading-5 text-muted-foreground max-md:hidden">
-              Go、Cargo、Docker、pnpm 与 Yarn
+              Go、Cargo、Docker、pnpm、Yarn 与 pip
               已支持只读扫描；写入能力需先完成独立的安全设计。
             </p>
           </aside>
@@ -1734,6 +1757,94 @@ function App() {
               <p className="mt-5 border-l-2 border-border px-4 py-3 text-xs text-muted-foreground">
                 只读取由已检测版本确定的配置格式和允许的环境变量；不会读取认证项、
                 缓存、lockfile、工作区文件或依赖内容。
+              </p>
+            </section>
+
+            <section
+              id="pip"
+              aria-labelledby="pip-heading"
+              className="mt-12 border-t border-border pt-8"
+            >
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    工具配置 / 只读扫描
+                  </p>
+                  <h2 id="pip-heading" className="mt-1 text-xl font-semibold">
+                    pip index 与代理
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    查看 Windows 全局、用户、当前 Python 虚拟环境与环境变量中的
+                    index 和代理来源。
+                  </p>
+                </div>
+                <Button
+                  disabled={scanState === "loading"}
+                  onClick={scanPip}
+                  variant="outline"
+                >
+                  <RefreshCw aria-hidden="true" />
+                  扫描 pip
+                </Button>
+              </div>
+
+              {pipResult ? (
+                <>
+                  <div className="mt-5 divide-y divide-border border-y border-border">
+                    {Object.entries(pipResult.effective_config.values).map(
+                      ([key, value]) => (
+                        <article
+                          className="grid gap-3 py-4 md:grid-cols-[14rem_minmax(0,1fr)]"
+                          key={key}
+                        >
+                          <p className="font-mono text-sm font-medium">{key}</p>
+                          <div className="min-w-0">
+                            <code className="block truncate rounded-md bg-muted px-2.5 py-2 font-mono text-xs">
+                              {value.value || "未设置"}
+                            </code>
+                            <ol className="mt-2 flex flex-wrap gap-1.5">
+                              {value.sources.map((source, index) => (
+                                <li
+                                  className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground"
+                                  key={`${source.location}-${index}`}
+                                >
+                                  {scopeLabels[source.scope]} ·{" "}
+                                  {source.location}
+                                  {index === value.sources.length - 1
+                                    ? " · 最终生效"
+                                    : ""}
+                                  {source.sensitive ? " · 凭据已掩盖" : ""}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        </article>
+                      ),
+                    )}
+                    {!Object.keys(pipResult.effective_config.values).length ? (
+                      <p className="py-6 text-sm text-muted-foreground">
+                        未发现受支持的 pip 配置项。
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {pipResult.diagnostics.length ? (
+                    <section className="mt-5 border-l-2 border-warning bg-warning/5 px-4 py-3">
+                      <h3 className="text-sm font-medium">需要注意</h3>
+                      <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
+                        {pipResult.diagnostics.map((diagnostic) => (
+                          <li key={diagnostic}>{diagnostic}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
+                </>
+              ) : null}
+
+              <p className="mt-5 border-l-2 border-border px-4 py-3 text-xs text-muted-foreground">
+                只读取约定的 pip.ini 路径与允许的 PIP_*
+                环境变量；不会读取认证项、 缓存、requirements、已安装包或
+                PIP_CONFIG_FILE 指向的任意文件。
               </p>
             </section>
 

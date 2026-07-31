@@ -14,6 +14,7 @@ pub enum ToolId {
     Docker,
     Pnpm,
     Yarn,
+    Pip,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,6 +52,7 @@ pub enum ConfigScope {
     System,
     User,
     Project,
+    VirtualEnvironment,
     Environment,
 }
 

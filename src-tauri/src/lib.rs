@@ -26,7 +26,8 @@ pub fn run() {
             commands::npm::rollback_npm_snapshot,
             commands::npm::check_npm_health,
             commands::pnpm::scan_pnpm,
-            commands::yarn::scan_yarn
+            commands::yarn::scan_yarn,
+            commands::pip::scan_pip
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

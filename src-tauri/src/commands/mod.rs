@@ -4,5 +4,6 @@ pub mod flutter_pub;
 pub mod go;
 pub mod maven;
 pub mod npm;
+pub mod pip;
 pub mod pnpm;
 pub mod yarn;
