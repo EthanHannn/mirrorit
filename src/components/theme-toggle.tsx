@@ -18,13 +18,13 @@ export function ThemeToggle() {
   return (
     <div
       aria-label="主题"
-      className="flex items-center rounded-lg border border-border bg-card p-0.5"
+      className="theme-segmented"
       role="radiogroup"
     >
       {themeOptions.map(({ value, label, Icon }) => (
         <Button
           aria-checked={preference === value}
-          className="h-7 px-2 text-xs"
+          className="theme-segment"
           key={value}
           onClick={() => setPreference(value)}
           role="radio"

@@ -1,16 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
   Activity,
+  CheckCircle2,
+  Circle,
   Download,
   FileDiff,
   FolderSearch,
+  Layers3,
   LoaderCircle,
+  LockKeyhole,
   PackageSearch,
+  PanelRight,
   RefreshCw,
   RotateCcw,
   Save,
+  ScanLine,
   ShieldCheck,
-  Terminal,
+  TriangleAlert,
 } from "lucide-react";
 import { useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -113,16 +119,21 @@ type ToolId =
   | "yarn"
   | "pip";
 
-const toolNavigation: Array<{ id: ToolId; label: string; mode: string }> = [
-  { id: "npm", label: "npm", mode: "可管理" },
-  { id: "maven", label: "Maven", mode: "可管理" },
-  { id: "flutter-pub", label: "Flutter/Pub", mode: "可管理" },
-  { id: "go", label: "Go", mode: "只读" },
-  { id: "cargo", label: "Cargo", mode: "只读" },
-  { id: "docker", label: "Docker", mode: "只读" },
-  { id: "pnpm", label: "pnpm", mode: "只读" },
-  { id: "yarn", label: "Yarn", mode: "只读" },
-  { id: "pip", label: "pip", mode: "只读" },
+const toolNavigation: Array<{
+  id: ToolId;
+  label: string;
+  mode: string;
+  glyph: string;
+}> = [
+  { id: "npm", label: "npm", mode: "可管理", glyph: "N" },
+  { id: "maven", label: "Maven", mode: "可管理", glyph: "M" },
+  { id: "flutter-pub", label: "Flutter/Pub", mode: "可管理", glyph: "F" },
+  { id: "go", label: "Go", mode: "只读", glyph: "Go" },
+  { id: "cargo", label: "Cargo", mode: "只读", glyph: "C" },
+  { id: "docker", label: "Docker", mode: "只读", glyph: "D" },
+  { id: "pnpm", label: "pnpm", mode: "只读", glyph: "P" },
+  { id: "yarn", label: "Yarn", mode: "只读", glyph: "Y" },
+  { id: "pip", label: "pip", mode: "只读", glyph: "Py" },
 ];
 
 const scopeLabels: Record<ConfigScope, string> = {
@@ -201,7 +212,7 @@ function App() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const configEntries = Object.entries(result?.effective_config.values ?? {});
-  const activeToolResult = {
+  const toolResults: Record<ToolId, NpmReadResult | null> = {
     npm: result,
     maven: mavenResult,
     "flutter-pub": flutterPubResult,
@@ -211,11 +222,35 @@ function App() {
     pnpm: pnpmResult,
     yarn: yarnResult,
     pip: pipResult,
-  }[activeTool];
+  };
+  const activeToolResult = toolResults[activeTool];
   const activeToolMeta = toolNavigation.find((tool) => tool.id === activeTool)!;
+  const activeToolEntries = Object.entries(
+    activeToolResult?.effective_config.values ?? {},
+  );
   const activeToolEntryCount = Object.keys(
     activeToolResult?.effective_config.values ?? {},
   ).length;
+  const activeSourceCount = activeToolEntries.reduce(
+    (count, [, value]) => count + value.sources.length,
+    0,
+  );
+  const activePlan =
+    activeTool === "npm"
+      ? plan
+      : activeTool === "maven"
+        ? mavenPlan
+        : activeTool === "flutter-pub"
+          ? flutterPubPlan
+          : null;
+  const activeSnapshotId =
+    activeTool === "npm"
+      ? snapshotId
+      : activeTool === "maven"
+        ? mavenSnapshotId
+        : activeTool === "flutter-pub"
+          ? flutterPubSnapshotId
+          : null;
   const mavenMirrorEntries = Object.entries(
     mavenResult?.effective_config.values ?? {},
   ).filter(
@@ -682,92 +717,102 @@ function App() {
     }
   }
 
+  async function scanActiveTool() {
+    switch (activeTool) {
+      case "npm":
+        await scan();
+        break;
+      case "maven":
+        await scanMaven();
+        break;
+      case "flutter-pub":
+        await scanFlutterPub();
+        break;
+      case "go":
+        await scanGo();
+        break;
+      case "cargo":
+        await scanCargo();
+        break;
+      case "docker":
+        await scanDocker();
+        break;
+      case "pnpm":
+        await scanPnpm();
+        break;
+      case "yarn":
+        await scanYarn();
+        break;
+      case "pip":
+        await scanPip();
+        break;
+    }
+  }
+
   return (
     <ThemeProvider>
-      <div className="grid h-svh grid-rows-[3.5rem_minmax(0,1fr)] overflow-hidden bg-background text-foreground">
-        <header className="flex h-14 items-center justify-between border-b border-border bg-background/85 px-5 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
+      <div className="app-shell">
+        <header className="app-titlebar" data-tauri-drag-region>
+          <div className="app-identity" data-tauri-drag-region>
             <div
               aria-hidden="true"
-              className="grid size-7 place-items-center rounded-md bg-primary text-xs font-semibold text-primary-foreground"
+              className="app-mark"
             >
               M
             </div>
             <div>
-              <p className="text-sm font-semibold leading-4">MirrorIt</p>
-              <p className="mt-0.5 text-xs leading-3 text-muted-foreground">
-                本地配置工作台
-              </p>
+              <p className="app-name">MirrorIt</p>
+              <p className="app-subtitle">本机配置中心</p>
             </div>
           </div>
-          <ThemeToggle />
+          <div className="titlebar-tools">
+            <span className="local-status">
+              <CheckCircle2 aria-hidden="true" />
+              本地模式
+            </span>
+            <ThemeToggle />
+          </div>
         </header>
 
-        <div className="grid min-h-0 grid-cols-[14rem_minmax(0,1fr)] max-md:grid-cols-1 max-md:grid-rows-[auto_minmax(0,1fr)]">
-          <aside className="min-h-0 overflow-y-auto border-r border-border bg-muted/20 px-3 py-5 max-md:overflow-hidden max-md:border-r-0 max-md:border-b max-md:bg-background max-md:px-4 max-md:py-2">
-            <p className="px-2 text-xs font-medium text-muted-foreground max-md:hidden">
-              工具
-            </p>
-            <nav
-              aria-label="工具导航"
-              className="mt-2 grid gap-1 max-md:mt-0 max-md:flex max-md:items-center max-md:overflow-x-auto"
-            >
+        <div className="app-workspace">
+          <aside className="app-sidebar">
+            <div className="sidebar-heading">
+              <span>开发工具</span>
+              <span>{toolNavigation.length}</span>
+            </div>
+            <nav aria-label="工具导航" className="tool-navigation">
               {toolNavigation.map((tool) => (
                 <button
                   aria-current={activeTool === tool.id ? "page" : undefined}
-                  className={
-                    activeTool === tool.id
-                      ? "flex h-9 items-center gap-2 rounded-md bg-primary/10 px-2.5 text-left text-sm font-medium text-primary outline-none focus-visible:ring-3 focus-visible:ring-ring/30 max-md:shrink-0"
-                      : "flex h-9 items-center gap-2 rounded-md px-2.5 text-left text-sm font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/30 max-md:shrink-0"
-                  }
+                  className="tool-nav-item"
+                  data-active={activeTool === tool.id}
+                  data-tool={tool.id}
                   key={tool.id}
                   onClick={() => setActiveTool(tool.id)}
                   type="button"
                 >
-                  <Terminal aria-hidden="true" className="size-3.5 shrink-0" />
-                  <span>{tool.label}</span>
-                  <span className="ml-auto text-[10px] text-muted-foreground max-md:hidden">
-                    {tool.mode}
+                  <span aria-hidden="true" className="tool-glyph">
+                    {tool.glyph}
                   </span>
+                  <span className="tool-copy">
+                    <span>{tool.label}</span>
+                    <span>{tool.mode}</span>
+                  </span>
+                  <span
+                    aria-label={toolResults[tool.id] ? "已读取" : "未读取"}
+                    className="tool-read-state"
+                    data-ready={Boolean(toolResults[tool.id])}
+                  />
                 </button>
               ))}
             </nav>
-            <p className="mt-8 px-2 text-xs leading-5 text-muted-foreground max-md:hidden">
-              配置变更始终先生成差异预览。只读工具不会写入本机文件。
-            </p>
+            <div className="sidebar-trust">
+              <ShieldCheck aria-hidden="true" />
+              <p>所有写入都先预览，并自动准备恢复点。</p>
+            </div>
           </aside>
 
-          <main className="min-w-0 overflow-y-auto px-8 py-7 max-md:px-4 max-md:py-5">
-            <div
-              aria-live="polite"
-              className="mb-7 flex min-h-9 items-center gap-2 border-b border-border pb-4 text-sm"
-            >
-              <span
-                aria-hidden="true"
-                className={
-                  scanState === "loading" && operationTool === activeTool
-                    ? "size-2 rounded-full bg-primary"
-                    : scanState === "error" && operationTool === activeTool
-                      ? "size-2 rounded-full bg-destructive"
-                      : activeToolResult
-                        ? "size-2 rounded-full bg-primary"
-                        : "size-2 rounded-full bg-muted-foreground/40"
-                }
-              />
-              {scanState === "loading" && operationTool === activeTool ? (
-                <span>正在检查 {activeToolMeta.label} 配置…</span>
-              ) : scanState === "error" && operationTool === activeTool ? (
-                <span className="text-destructive">
-                  无法完成 {activeToolMeta.label} 操作：{errorMessage}
-                </span>
-              ) : activeToolResult ? (
-                <span className="text-muted-foreground">
-                  已读取 {activeToolEntryCount} 项受支持配置
-                </span>
-              ) : (
-                <span className="text-muted-foreground">尚未检查此工具</span>
-              )}
-            </div>
+          <main className="app-main">
             {activeTool === "npm" ? (
               <>
                 <section
@@ -2310,6 +2355,159 @@ function App() {
               </section>
             ) : null}
           </main>
+
+          <aside aria-label="当前工具检查器" className="app-inspector">
+            <header className="inspector-header">
+              <PanelRight aria-hidden="true" />
+              <h2>检查器</h2>
+            </header>
+
+            <div className="inspector-scroll">
+              <section className="inspector-section">
+                <div className="inspector-tool">
+                  <span
+                    aria-hidden="true"
+                    className="tool-glyph"
+                    data-tool={activeTool}
+                  >
+                    {activeToolMeta.glyph}
+                  </span>
+                  <div>
+                    <h3>{activeToolMeta.label}</h3>
+                    <p>{activeToolMeta.mode}</p>
+                  </div>
+                </div>
+
+                <div aria-live="polite" className="operation-status">
+                  {scanState === "loading" && operationTool === activeTool ? (
+                    <>
+                      <LoaderCircle aria-hidden="true" className="animate-spin" />
+                      <span>正在读取本机配置…</span>
+                    </>
+                  ) : scanState === "error" && operationTool === activeTool ? (
+                    <>
+                      <TriangleAlert aria-hidden="true" />
+                      <span>{errorMessage}</span>
+                    </>
+                  ) : activeToolResult ? (
+                    <>
+                      <CheckCircle2 aria-hidden="true" />
+                      <span>已读取 {activeToolEntryCount} 项配置</span>
+                    </>
+                  ) : (
+                    <>
+                      <Circle aria-hidden="true" />
+                      <span>尚未扫描此工具</span>
+                    </>
+                  )}
+                </div>
+
+                <Button
+                  className="w-full"
+                  disabled={scanState === "loading"}
+                  onClick={() => void scanActiveTool()}
+                >
+                  {scanState === "loading" && operationTool === activeTool ? (
+                    <LoaderCircle aria-hidden="true" className="animate-spin" />
+                  ) : (
+                    <ScanLine aria-hidden="true" />
+                  )}
+                  扫描配置
+                </Button>
+              </section>
+
+              <section className="inspector-section">
+                <div className="inspector-section-heading">
+                  <h3>来源概览</h3>
+                  <span>{activeSourceCount} 条轨迹</span>
+                </div>
+                {activeToolEntries.length ? (
+                  <ol className="source-preview">
+                    {activeToolEntries.slice(0, 5).map(([key, value]) => (
+                      <li key={key}>
+                        <span className="source-preview-dot" />
+                        <div>
+                          <code>{key}</code>
+                          <p title={value.value ?? "未设置"}>
+                            {value.value ?? "未设置"}
+                          </p>
+                        </div>
+                        <span>{value.sources.length}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="inspector-empty">
+                    扫描后，这里会汇总生效值及其来源数量。
+                  </p>
+                )}
+                {activeToolEntries.length > 5 ? (
+                  <p className="inspector-footnote">
+                    另有 {activeToolEntries.length - 5} 项配置显示在工作区中。
+                  </p>
+                ) : null}
+              </section>
+
+              {activePlan ? (
+                <section className="inspector-section">
+                  <div className="inspector-section-heading">
+                    <h3>变更预览</h3>
+                    <span>{activePlan.changes.length} 项</span>
+                  </div>
+                  <div className="plan-summary">
+                    <Layers3 aria-hidden="true" />
+                    <p>
+                      已生成只读差异。确认前不会写入任何配置文件。
+                    </p>
+                  </div>
+                </section>
+              ) : null}
+
+              {activeSnapshotId ? (
+                <section className="inspector-section">
+                  <div className="inspector-section-heading">
+                    <h3>恢复点</h3>
+                    <CheckCircle2 aria-hidden="true" />
+                  </div>
+                  <code className="snapshot-code">{activeSnapshotId}</code>
+                </section>
+              ) : null}
+
+              {activeToolResult?.diagnostics.length ? (
+                <section className="inspector-section">
+                  <div className="inspector-section-heading">
+                    <h3>需要注意</h3>
+                    <TriangleAlert aria-hidden="true" />
+                  </div>
+                  <ul className="diagnostic-list">
+                    {activeToolResult.diagnostics.slice(0, 3).map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+
+              {activeTool === "npm" && healthResult ? (
+                <section className="inspector-section">
+                  <div className="inspector-section-heading">
+                    <h3>连接检查</h3>
+                    <span>{healthResult.elapsed_ms} ms</span>
+                  </div>
+                  <p className="inspector-empty">
+                    {healthResult.status === "healthy"
+                      ? "目标地址连接正常。"
+                      : healthResult.message ||
+                        healthResult.status.replace(/_/g, " ")}
+                  </p>
+                </section>
+              ) : null}
+            </div>
+
+            <footer className="inspector-safety">
+              <LockKeyhole aria-hidden="true" />
+              <p>凭据不会出现在导出、日志或来源预览中。</p>
+            </footer>
+          </aside>
         </div>
       </div>
     </ThemeProvider>

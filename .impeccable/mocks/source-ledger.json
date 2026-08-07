@@ -1,0 +1,19 @@
+{
+  "approved": true,
+  "approvedAt": "2026-08-07",
+  "viewport": "1536x1024",
+  "mode": "operate",
+  "direction": "信号路径工作台",
+  "composition": "来源账本",
+  "promptFile": ".impeccable/mocks/source-ledger.prompt.txt",
+  "selectionEvidence": [
+    "三栏结构直接映射工具选择、来源解释和受控操作。",
+    "纵向来源轨道能表达优先级和覆盖关系，不暗示用户可以编辑拓扑。",
+    "在 1024px 以上保持高信息密度，同时能在窄窗口折叠右侧检查器。"
+  ],
+  "doNotLiteralize": [
+    "不使用草图中的第三方工具品牌图标。",
+    "不使用草图生成的示例用户路径或未实现状态数据。",
+    "不把每个设置区块实现为独立浮动卡片。"
+  ]
+}

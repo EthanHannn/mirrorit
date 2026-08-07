@@ -1,0 +1,72 @@
+{
+  "title": "选择 MirrorIt 的桌面视觉世界",
+  "question": "保留全部功能与 Windows 桌面习惯，选择最适合承载‘来源轨迹’的视觉语言。",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "信号路径工作台",
+      "kicker": "来源轨迹",
+      "lineage": "网络路由图、IDE 检查器与 Apple 式桌面层级",
+      "thesis": "把最终生效值做成一条可检查、可预览、可回退的配置路径。",
+      "palette": ["#F3F5F8", "#16181D", "#0A84FF", "#30D158"],
+      "materials": ["雾化侧栏", "哑光内容平面", "精密发丝线"],
+      "viewport": "左侧工具源列表，中间是来源节点汇入有效值的路径图，右侧检查器承载扫描、差异与恢复。",
+      "risk": "路径图若信息过多会显得技术化，必须用层级与渐进披露控制密度。",
+      "sketch": ".impeccable/sketches/assigned.png"
+    },
+    {
+      "id": "challenger-hardware",
+      "label": "创作者硬件台",
+      "lineage": "骨白键帽、枪灰底盘与琥珀状态屏",
+      "thesis": "每个工具像一枚有明确行程的硬件按键，关键操作拥有触觉般的确定性。",
+      "palette": ["#D9D4C8", "#34383D", "#F36A21", "#E6A84A"],
+      "materials": ["染料升华键帽", "阳极氧化铝", "琥珀显示屏"],
+      "viewport": "工具按键构成左侧控制列，中央以硬件面板展示配置，右侧琥珀屏报告单一当前状态。",
+      "case": "开发者辨识度很强，但产品信息容易被器物感压过；清晰度略低于信号路径。",
+      "risk": "物理拟态过量会背离克制的 Apple 方向。",
+      "sketch": ".impeccable/sketches/challenger-hardware.png",
+      "hero": "https://impeccable.style/worlds/cards/design-canon-creator-hardware-bench-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/design-canon-creator-hardware-bench.webp"
+    },
+    {
+      "id": "challenger-iridescent",
+      "label": "虹彩边缘",
+      "lineage": "云白内容场与极窄的薄荷、玫瑰、紫色衍射边",
+      "thesis": "让颜色只出现在来源合流和状态变化的边缘，内容本身保持安静。",
+      "palette": ["#F8FAFC", "#3A424E", "#9FE3D0", "#B5A7FF"],
+      "materials": ["云白平面", "光谱发丝边", "柔和雾化层"],
+      "viewport": "大面积白灰工作区中，来源链以窄光谱边缘贯穿，选中状态在检查器边界形成轻微虹彩。",
+      "case": "Apple 气质最自然，但开发工具辨识度稍弱；适合作为材质语言而非完整拓扑。",
+      "risk": "处理不精确会退化为泛化渐变。",
+      "sketch": ".impeccable/sketches/challenger-iridescent.png",
+      "hero": "https://impeccable.style/worlds/cards/clouds-storms-auroras-iridescent-cloud-edge-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/clouds-storms-auroras-iridescent-cloud-edge.webp"
+    },
+    {
+      "id": "challenger-cassette",
+      "label": "磁带未来主义面板",
+      "lineage": "拉丝铝面板、米色外壳与橙色 LED 梯",
+      "thesis": "把扫描、应用和回滚组织成一块一眼可读的专业设备面板。",
+      "palette": ["#D7D6D1", "#202226", "#C8BDAE", "#FF8A1F"],
+      "materials": ["拉丝铝", "米色工程塑料", "橙色 LED"],
+      "viewport": "单一面板按工具、有效值和操作分区，状态通过细小 LED 梯与机械切换反馈。",
+      "case": "操作确定性强，但复古语义会削弱 MirrorIt 的长期中性与跨平台适应性。",
+      "risk": "容易变成主题皮肤，而不是高效桌面工具。",
+      "sketch": ".impeccable/sketches/challenger-cassette.png",
+      "hero": "https://impeccable.style/worlds/cards/pop-culture-shelf-cassette-futurism-deck-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/pop-culture-shelf-cassette-futurism-deck.webp"
+    }
+  ],
+  "reroll": true,
+  "canon": true,
+  "canonCard": {
+    "label": "标准桌面设置工具",
+    "thesis": "熟悉的侧栏、设置分组和状态行，以最高完成度直接执行。",
+    "palette": ["#F5F5F7", "#1D1D1F", "#007AFF", "#34C759"],
+    "materials": ["原生浅灰背景", "白色设置分组", "系统蓝选中态"],
+    "viewport": "左侧工具导航，右侧纵向设置分组和底部操作区，结构最熟悉但产品签名最弱。",
+    "risk": "清晰可靠，但容易与常规系统设置工具同质化。",
+    "sketch": ".impeccable/sketches/canon.png"
+  },
+  "steer": true
+}
