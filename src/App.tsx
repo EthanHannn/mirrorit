@@ -14,7 +14,6 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
-  ScanLine,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
@@ -162,6 +161,160 @@ const profileDefinitions: Record<
   },
 };
 
+function ToolIdleState({ toolLabel }: { toolLabel: string }) {
+  return (
+    <section className="workspace-empty" aria-label={`${toolLabel} 未扫描`}>
+      <PackageSearch aria-hidden="true" />
+      <div>
+        <p>尚未扫描 {toolLabel}</p>
+        <span>扫描后将按优先级展示生效值与来源轨迹。</span>
+      </div>
+    </section>
+  );
+}
+
+function NpmLedger({
+  result,
+  scanState,
+}: {
+  result: NpmReadResult | null;
+  scanState: "idle" | "loading" | "error";
+}) {
+  const configEntries = Object.entries(result?.effective_config.values ?? {});
+
+  if (!result && scanState !== "loading") {
+    return (
+      <section
+        aria-labelledby="pending-ledger-heading"
+        className="npm-ledger pending-ledger"
+      >
+        <div className="ledger-heading">
+          <h2 id="pending-ledger-heading">来源账本</h2>
+          <span>等待扫描</span>
+        </div>
+        <ol aria-label="待扫描来源层级">
+          {["环境变量", "项目配置", "用户配置", "最终生效"].map(
+            (label, index) => (
+              <li data-effective={index === 3} key={label}>
+                <span>{label}</span>
+                <small>{index === 3 ? "扫描后确定生效值" : "扫描后读取"}</small>
+              </li>
+            ),
+          )}
+        </ol>
+      </section>
+    );
+  }
+
+  if (!result) {
+    return null;
+  }
+
+  return (
+    <section
+      aria-labelledby="effective-heading"
+      className="npm-ledger source-ledger pt-7"
+    >
+      <div className="flex items-baseline justify-between">
+        <h2 id="effective-heading" className="text-base font-semibold">
+          生效配置
+        </h2>
+        <span className="text-xs text-muted-foreground">
+          {configEntries.length} 项已识别
+        </span>
+      </div>
+
+      {configEntries.length ? (
+        <div className="source-ledger-list mt-4 divide-y divide-border border-y border-border">
+          {configEntries.map(([key, value]) => (
+            <article
+              className="source-ledger-entry grid gap-4 py-4 lg:grid-cols-[10rem_minmax(0,1fr)]"
+              key={key}
+            >
+              <div>
+                <p className="font-mono text-sm font-medium">{key}</p>
+                <p className="mt-1 text-xs text-muted-foreground">最终生效值</p>
+              </div>
+              <div className="source-ledger-value min-w-0">
+                <code className="block truncate rounded-md bg-muted px-2.5 py-2 font-mono text-xs text-foreground">
+                  {value.value ?? "未设置"}
+                </code>
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="h-px w-5 bg-border" />
+                  <p className="text-xs font-medium text-muted-foreground">
+                    来源轨迹
+                  </p>
+                </div>
+                <ol className="source-ledger-track mt-3 grid gap-2">
+                  {value.sources.map((source, index) => (
+                    <li
+                      className="source-ledger-node grid gap-2 py-1.5 pl-5 text-xs"
+                      data-effective={index === value.sources.length - 1}
+                      key={`${source.location}-${source.priority}-${index}`}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">
+                          {scopeLabels[source.scope]} · {source.location}
+                        </span>
+                        <span className="source-priority">
+                          优先级 {source.priority}
+                        </span>
+                        <span
+                          className={
+                            index === value.sources.length - 1
+                              ? "rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary"
+                              : "rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground"
+                          }
+                        >
+                          {index === value.sources.length - 1
+                            ? "最终生效"
+                            : "被后续来源覆盖"}
+                        </span>
+                        {source.sensitive ? (
+                          <span className="inline-flex items-center gap-1 text-warning">
+                            <ShieldCheck
+                              aria-hidden="true"
+                              className="size-3"
+                            />
+                            凭据已掩盖
+                          </span>
+                        ) : null}
+                      </div>
+                      <code className="block truncate font-mono text-muted-foreground">
+                        {source.value ?? "未设置"}
+                      </code>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-4 border-y border-border py-8 text-sm text-muted-foreground">
+          未发现受支持的 npm 配置项。
+        </div>
+      )}
+
+      {result.diagnostics.length ? (
+        <section
+          aria-labelledby="diagnostic-heading"
+          className="mt-6 border-l border-warning bg-warning/5 px-4 py-3"
+        >
+          <h3 id="diagnostic-heading" className="text-sm font-medium">
+            需要注意
+          </h3>
+          <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
+            {result.diagnostics.map((diagnostic) => (
+              <li key={diagnostic}>{diagnostic}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </section>
+  );
+}
+
 function App() {
   const [activeTool, setActiveTool] = useState<ToolId>("npm");
   const [operationTool, setOperationTool] = useState<ToolId>("npm");
@@ -211,7 +364,6 @@ function App() {
   );
   const [errorMessage, setErrorMessage] = useState("");
 
-  const configEntries = Object.entries(result?.effective_config.values ?? {});
   const toolResults: Record<ToolId, NpmReadResult | null> = {
     npm: result,
     maven: mavenResult,
@@ -717,47 +869,12 @@ function App() {
     }
   }
 
-  async function scanActiveTool() {
-    switch (activeTool) {
-      case "npm":
-        await scan();
-        break;
-      case "maven":
-        await scanMaven();
-        break;
-      case "flutter-pub":
-        await scanFlutterPub();
-        break;
-      case "go":
-        await scanGo();
-        break;
-      case "cargo":
-        await scanCargo();
-        break;
-      case "docker":
-        await scanDocker();
-        break;
-      case "pnpm":
-        await scanPnpm();
-        break;
-      case "yarn":
-        await scanYarn();
-        break;
-      case "pip":
-        await scanPip();
-        break;
-    }
-  }
-
   return (
     <ThemeProvider>
       <div className="app-shell">
         <header className="app-titlebar" data-tauri-drag-region>
           <div className="app-identity" data-tauri-drag-region>
-            <div
-              aria-hidden="true"
-              className="app-mark"
-            >
+            <div aria-hidden="true" className="app-mark">
               M
             </div>
             <div>
@@ -814,18 +931,15 @@ function App() {
 
           <main className="app-main">
             {activeTool === "npm" ? (
-              <>
+              <div className="npm-workspace">
                 <section
                   aria-labelledby="npm-heading"
-                  className="flex flex-wrap items-end justify-between gap-5 border-b border-border pb-7"
+                  className="npm-overview flex flex-wrap items-end justify-between gap-5 border-b border-border pb-7"
                 >
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      工具配置 / 只读扫描
-                    </p>
                     <h1
                       id="npm-heading"
-                      className="mt-1 flex items-center gap-2 text-xl font-semibold"
+                      className="flex items-center gap-2 text-xl font-semibold"
                     >
                       npm 配置来源
                       <span className="rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
@@ -850,18 +964,43 @@ function App() {
                   </Button>
                 </section>
 
+                <NpmLedger result={result} scanState={scanState} />
+
+                <section
+                  aria-label="扫描范围"
+                  className="npm-range grid gap-3 border-b border-border py-5 lg:grid-cols-[1fr_auto]"
+                >
+                  <label className="grid gap-1.5 text-sm font-medium">
+                    <span>项目目录（可选）</span>
+                    <div className="relative">
+                      <FolderSearch
+                        aria-hidden="true"
+                        className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+                      />
+                      <input
+                        className="h-9 w-full rounded-md border border-input bg-card py-1 pr-3 pl-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+                        onChange={(event) =>
+                          setProjectDirectory(event.target.value)
+                        }
+                        placeholder="例如 C:\work\my-project"
+                        value={projectDirectory}
+                      />
+                    </div>
+                  </label>
+                  <p className="self-end pb-2 text-xs text-muted-foreground">
+                    未填写时只读取用户级和环境变量配置
+                  </p>
+                </section>
+
                 <section
                   aria-labelledby="health-heading"
-                  className="border-b border-border py-6"
+                  className="npm-health border-b border-border py-6"
                 >
                   <div className="flex flex-wrap items-end justify-between gap-4">
                     <div>
-                      <p className="text-xs font-medium text-muted-foreground">
-                        显式检查
-                      </p>
                       <h2
                         id="health-heading"
-                        className="mt-1 text-base font-semibold"
+                        className="text-base font-semibold"
                       >
                         npm 源连通性
                       </h2>
@@ -895,43 +1034,14 @@ function App() {
                 </section>
 
                 <section
-                  aria-label="扫描范围"
-                  className="grid gap-3 border-b border-border py-5 lg:grid-cols-[1fr_auto]"
-                >
-                  <label className="grid gap-1.5 text-sm font-medium">
-                    <span>项目目录（可选）</span>
-                    <div className="relative">
-                      <FolderSearch
-                        aria-hidden="true"
-                        className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                      />
-                      <input
-                        className="h-9 w-full rounded-md border border-input bg-card py-1 pr-3 pl-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
-                        onChange={(event) =>
-                          setProjectDirectory(event.target.value)
-                        }
-                        placeholder="例如 C:\work\my-project"
-                        value={projectDirectory}
-                      />
-                    </div>
-                  </label>
-                  <p className="self-end pb-2 text-xs text-muted-foreground">
-                    未填写时只读取用户级和环境变量配置
-                  </p>
-                </section>
-
-                <section
                   aria-labelledby="profile-heading"
-                  className="border-b border-border py-6"
+                  className="npm-profile border-b border-border py-6"
                 >
                   <div className="flex flex-wrap items-end justify-between gap-4">
                     <div>
-                      <p className="text-xs font-medium text-muted-foreground">
-                        下一步
-                      </p>
                       <h2
                         id="profile-heading"
-                        className="mt-1 text-base font-semibold"
+                        className="text-base font-semibold"
                       >
                         预览配置档
                       </h2>
@@ -956,7 +1066,7 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  <div className="profile-grid mt-4 grid gap-3">
                     {(
                       Object.keys(profileDefinitions) as Array<
                         Exclude<ProfileKind, "custom">
@@ -1047,9 +1157,7 @@ function App() {
                   <div className="mt-5 border-t border-border pt-5">
                     <div className="flex flex-wrap items-end justify-between gap-3">
                       <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          导入预览
-                        </p>
+                        <p className="text-sm font-medium">导入配置档</p>
                         <p className="mt-1 text-sm text-muted-foreground">
                           仅比较所选 JSON 配置档，不会应用任何更改。
                         </p>
@@ -1080,7 +1188,7 @@ function App() {
                       </p>
                     ) : null}
                     {importPreview ? (
-                      <div className="mt-3 grid gap-2 border-l-2 border-warning bg-warning/5 px-4 py-3 text-sm">
+                      <div className="mt-3 grid gap-2 border-l border-warning bg-warning/5 px-4 py-3 text-sm">
                         <p className="font-medium">
                           {importPreview.name}{" "}
                           {importPreview.changed
@@ -1101,146 +1209,16 @@ function App() {
                   </div>
                 </section>
 
-                {!result && scanState !== "loading" ? (
-                  <section className="grid min-h-64 place-items-center border-b border-border py-10 text-center">
-                    <div>
-                      <PackageSearch
-                        aria-hidden="true"
-                        className="mx-auto size-6 text-muted-foreground"
-                      />
-                      <p className="mt-3 text-sm font-medium">
-                        尚未扫描 npm 配置
-                      </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        结果会按实际优先级保留来源轨迹。
-                      </p>
-                    </div>
-                  </section>
-                ) : null}
-
-                {result ? (
-                  <section aria-labelledby="effective-heading" className="pt-7">
-                    <div className="flex items-baseline justify-between">
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          扫描结果
-                        </p>
-                        <h2
-                          id="effective-heading"
-                          className="mt-1 text-base font-semibold"
-                        >
-                          生效配置
-                        </h2>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {configEntries.length} 项已识别
-                      </span>
-                    </div>
-
-                    {configEntries.length ? (
-                      <div className="mt-4 divide-y divide-border border-y border-border">
-                        {configEntries.map(([key, value]) => (
-                          <article
-                            className="grid gap-4 py-4 lg:grid-cols-[10rem_minmax(0,1fr)]"
-                            key={key}
-                          >
-                            <div>
-                              <p className="font-mono text-sm font-medium">
-                                {key}
-                              </p>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                最终生效值
-                              </p>
-                            </div>
-                            <div className="min-w-0">
-                              <code className="block truncate rounded-md bg-muted px-2.5 py-2 font-mono text-xs text-foreground">
-                                {value.value ?? "未设置"}
-                              </code>
-                              <div className="mt-4 flex items-center gap-2">
-                                <span className="h-px w-5 bg-border" />
-                                <p className="text-xs font-medium text-muted-foreground">
-                                  来源轨迹
-                                </p>
-                              </div>
-                              <ol className="mt-3 grid gap-2">
-                                {value.sources.map((source, index) => (
-                                  <li
-                                    className="grid gap-2 border-l-2 border-border py-1.5 pl-3 text-xs"
-                                    key={`${source.location}-${source.priority}-${index}`}
-                                  >
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className="font-medium">
-                                        {scopeLabels[source.scope]} ·{" "}
-                                        {source.location}
-                                      </span>
-                                      <span
-                                        className={
-                                          index === value.sources.length - 1
-                                            ? "rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary"
-                                            : "rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground"
-                                        }
-                                      >
-                                        {index === value.sources.length - 1
-                                          ? "最终生效"
-                                          : "被后续来源覆盖"}
-                                      </span>
-                                      {source.sensitive ? (
-                                        <span className="inline-flex items-center gap-1 text-warning">
-                                          <ShieldCheck
-                                            aria-hidden="true"
-                                            className="size-3"
-                                          />
-                                          凭据已掩盖
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                    <code className="block truncate font-mono text-muted-foreground">
-                                      {source.value ?? "未设置"}
-                                    </code>
-                                  </li>
-                                ))}
-                              </ol>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mt-4 border-y border-border py-8 text-sm text-muted-foreground">
-                        未发现受支持的 npm 配置项。
-                      </div>
-                    )}
-
-                    {result.diagnostics.length ? (
-                      <section
-                        aria-labelledby="diagnostic-heading"
-                        className="mt-6 border-l-2 border-warning bg-warning/5 px-4 py-3"
-                      >
-                        <h3
-                          id="diagnostic-heading"
-                          className="text-sm font-medium"
-                        >
-                          需要注意
-                        </h3>
-                        <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
-                          {result.diagnostics.map((diagnostic) => (
-                            <li key={diagnostic}>{diagnostic}</li>
-                          ))}
-                        </ul>
-                      </section>
-                    ) : null}
-                  </section>
-                ) : null}
-
                 {plan ? (
-                  <section aria-labelledby="plan-heading" className="mt-8">
+                  <section
+                    aria-labelledby="plan-heading"
+                    className="npm-plan mt-8"
+                  >
                     <div className="flex flex-wrap items-end justify-between gap-3">
                       <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          只读预览
-                        </p>
                         <h2
                           id="plan-heading"
-                          className="mt-1 text-base font-semibold"
+                          className="text-base font-semibold"
                         >
                           将要发生的变更
                         </h2>
@@ -1289,7 +1267,7 @@ function App() {
                             </div>
                           </div>
                           {change.risk ? (
-                            <p className="mt-3 border-l-2 border-warning pl-2 text-xs text-warning">
+                            <p className="mt-3 border-l border-warning pl-2 text-xs text-warning">
                               {change.risk}
                             </p>
                           ) : null}
@@ -1300,7 +1278,7 @@ function App() {
                 ) : null}
 
                 {snapshotId ? (
-                  <section className="mt-6 flex flex-wrap items-center justify-between gap-3 border-l-2 border-primary bg-primary/5 px-4 py-3">
+                  <section className="npm-snapshot mt-6 flex flex-wrap items-center justify-between gap-3 border-l border-primary bg-primary/5 px-4 py-3">
                     <div>
                       <p className="text-sm font-medium">已创建可恢复快照</p>
                       <p className="mt-1 font-mono text-xs text-muted-foreground">
@@ -1317,7 +1295,7 @@ function App() {
                     </Button>
                   </section>
                 ) : null}
-              </>
+              </div>
             ) : null}
 
             {activeTool === "maven" ? (
@@ -1328,13 +1306,7 @@ function App() {
               >
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      工具配置 / 只读扫描
-                    </p>
-                    <h2
-                      id="maven-heading"
-                      className="mt-1 text-xl font-semibold"
-                    >
+                    <h2 id="maven-heading" className="text-xl font-semibold">
                       Maven settings.xml
                     </h2>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -1345,12 +1317,12 @@ function App() {
                   <Button
                     disabled={scanState === "loading"}
                     onClick={scanMaven}
-                    variant="outline"
                   >
                     <RefreshCw aria-hidden="true" />
                     扫描 Maven
                   </Button>
                 </div>
+                {!mavenResult ? <ToolIdleState toolLabel="Maven" /> : null}
                 {mavenResult ? (
                   <>
                     <div className="mt-5 divide-y divide-border border-y border-border">
@@ -1400,12 +1372,9 @@ function App() {
                       >
                         <div className="flex flex-wrap items-end justify-between gap-4">
                           <div>
-                            <p className="text-xs font-medium text-muted-foreground">
-                              安全变更
-                            </p>
                             <h3
                               id="maven-edit-heading"
-                              className="mt-1 text-base font-semibold"
+                              className="text-base font-semibold"
                             >
                               更新镜像 URL
                             </h3>
@@ -1470,12 +1439,9 @@ function App() {
                       >
                         <div className="flex flex-wrap items-end justify-between gap-3">
                           <div>
-                            <p className="text-xs font-medium text-muted-foreground">
-                              只读预览
-                            </p>
                             <h3
                               id="maven-plan-heading"
-                              className="mt-1 text-base font-semibold"
+                              className="text-base font-semibold"
                             >
                               将要发生的变更
                             </h3>
@@ -1525,7 +1491,7 @@ function App() {
                     ) : null}
 
                     {mavenSnapshotId ? (
-                      <section className="mt-6 flex flex-wrap items-center justify-between gap-3 border-l-2 border-primary bg-primary/5 px-4 py-3">
+                      <section className="mt-6 flex flex-wrap items-center justify-between gap-3 border-l border-primary bg-primary/5 px-4 py-3">
                         <div>
                           <p className="text-sm font-medium">
                             已创建 Maven 可恢复快照
@@ -1553,25 +1519,20 @@ function App() {
               <section id="go" aria-labelledby="go-heading" className="pb-8">
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      工具配置 / 只读扫描
-                    </p>
-                    <h2 id="go-heading" className="mt-1 text-xl font-semibold">
+                    <h2 id="go-heading" className="text-xl font-semibold">
                       Go 模块环境
                     </h2>
                     <p className="mt-2 text-sm text-muted-foreground">
                       查看模块代理、校验数据库与私有模块规则的有效值和来源轨迹。
                     </p>
                   </div>
-                  <Button
-                    disabled={scanState === "loading"}
-                    onClick={scanGo}
-                    variant="outline"
-                  >
+                  <Button disabled={scanState === "loading"} onClick={scanGo}>
                     <RefreshCw aria-hidden="true" />
                     扫描 Go
                   </Button>
                 </div>
+
+                {!goResult ? <ToolIdleState toolLabel="Go" /> : null}
 
                 {goResult ? (
                   <>
@@ -1616,7 +1577,7 @@ function App() {
                     </div>
 
                     {goResult.diagnostics.length ? (
-                      <section className="mt-5 border-l-2 border-warning bg-warning/5 px-4 py-3">
+                      <section className="mt-5 border-l border-warning bg-warning/5 px-4 py-3">
                         <h3 className="text-sm font-medium">需要注意</h3>
                         <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
                           {goResult.diagnostics.map((diagnostic) => (
@@ -1628,7 +1589,7 @@ function App() {
                   </>
                 ) : null}
 
-                <p className="mt-5 border-l-2 border-border px-4 py-3 text-xs text-muted-foreground">
+                <p className="mt-5 border-l border-border px-4 py-3 text-xs text-muted-foreground">
                   此阶段不会修改 GOENV、环境变量、模块缓存或项目文件。
                 </p>
               </section>
@@ -1642,13 +1603,7 @@ function App() {
               >
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      工具配置 / 只读扫描
-                    </p>
-                    <h2
-                      id="cargo-heading"
-                      className="mt-1 text-xl font-semibold"
-                    >
+                    <h2 id="cargo-heading" className="text-xl font-semibold">
                       Cargo registry
                     </h2>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -1659,12 +1614,13 @@ function App() {
                   <Button
                     disabled={scanState === "loading"}
                     onClick={scanCargo}
-                    variant="outline"
                   >
                     <RefreshCw aria-hidden="true" />
                     扫描 Cargo
                   </Button>
                 </div>
+
+                {!cargoResult ? <ToolIdleState toolLabel="Cargo" /> : null}
 
                 {cargoResult ? (
                   <>
@@ -1710,7 +1666,7 @@ function App() {
                     </div>
 
                     {cargoResult.diagnostics.length ? (
-                      <section className="mt-5 border-l-2 border-warning bg-warning/5 px-4 py-3">
+                      <section className="mt-5 border-l border-warning bg-warning/5 px-4 py-3">
                         <h3 className="text-sm font-medium">需要注意</h3>
                         <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
                           {cargoResult.diagnostics.map((diagnostic) => (
@@ -1722,7 +1678,7 @@ function App() {
                   </>
                 ) : null}
 
-                <p className="mt-5 border-l-2 border-border px-4 py-3 text-xs text-muted-foreground">
+                <p className="mt-5 border-l border-border px-4 py-3 text-xs text-muted-foreground">
                   只读取用户级与明确选择项目的配置；不会读取
                   token、凭据文件、缓存或 Cargo.lock。
                 </p>
@@ -1737,13 +1693,7 @@ function App() {
               >
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      工具配置 / 只读扫描
-                    </p>
-                    <h2
-                      id="docker-heading"
-                      className="mt-1 text-xl font-semibold"
-                    >
+                    <h2 id="docker-heading" className="text-xl font-semibold">
                       Docker 镜像与代理
                     </h2>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -1754,12 +1704,13 @@ function App() {
                   <Button
                     disabled={scanState === "loading"}
                     onClick={scanDocker}
-                    variant="outline"
                   >
                     <RefreshCw aria-hidden="true" />
                     扫描 Docker
                   </Button>
                 </div>
+
+                {!dockerResult ? <ToolIdleState toolLabel="Docker" /> : null}
 
                 {dockerResult ? (
                   <>
@@ -1805,7 +1756,7 @@ function App() {
                     </div>
 
                     {dockerResult.diagnostics.length ? (
-                      <section className="mt-5 border-l-2 border-warning bg-warning/5 px-4 py-3">
+                      <section className="mt-5 border-l border-warning bg-warning/5 px-4 py-3">
                         <h3 className="text-sm font-medium">需要注意</h3>
                         <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
                           {dockerResult.diagnostics.map((diagnostic) => (
@@ -1817,7 +1768,7 @@ function App() {
                   </>
                 ) : null}
 
-                <p className="mt-5 border-l-2 border-border px-4 py-3 text-xs text-muted-foreground">
+                <p className="mt-5 border-l border-border px-4 py-3 text-xs text-muted-foreground">
                   不会读取认证信息、Docker Desktop
                   设置、镜像、容器或构建缓存；不会连接或启动 Docker 守护进程。
                 </p>
@@ -1832,13 +1783,7 @@ function App() {
               >
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      工具配置 / 只读扫描
-                    </p>
-                    <h2
-                      id="pnpm-heading"
-                      className="mt-1 text-xl font-semibold"
-                    >
+                    <h2 id="pnpm-heading" className="text-xl font-semibold">
                       pnpm registry 与代理
                     </h2>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -1846,15 +1791,13 @@ function App() {
                       registry 和代理来源。
                     </p>
                   </div>
-                  <Button
-                    disabled={scanState === "loading"}
-                    onClick={scanPnpm}
-                    variant="outline"
-                  >
+                  <Button disabled={scanState === "loading"} onClick={scanPnpm}>
                     <RefreshCw aria-hidden="true" />
                     扫描 pnpm
                   </Button>
                 </div>
+
+                {!pnpmResult ? <ToolIdleState toolLabel="pnpm" /> : null}
 
                 {pnpmResult ? (
                   <>
@@ -1900,7 +1843,7 @@ function App() {
                     </div>
 
                     {pnpmResult.diagnostics.length ? (
-                      <section className="mt-5 border-l-2 border-warning bg-warning/5 px-4 py-3">
+                      <section className="mt-5 border-l border-warning bg-warning/5 px-4 py-3">
                         <h3 className="text-sm font-medium">需要注意</h3>
                         <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
                           {pnpmResult.diagnostics.map((diagnostic) => (
@@ -1912,7 +1855,7 @@ function App() {
                   </>
                 ) : null}
 
-                <p className="mt-5 border-l-2 border-border px-4 py-3 text-xs text-muted-foreground">
+                <p className="mt-5 border-l border-border px-4 py-3 text-xs text-muted-foreground">
                   只读取允许的 .npmrc 字段与环境变量；不会读取 token、认证项、
                   lockfile、store、缓存或项目工作区文件。
                 </p>
@@ -1927,13 +1870,7 @@ function App() {
               >
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      工具配置 / 只读扫描
-                    </p>
-                    <h2
-                      id="yarn-heading"
-                      className="mt-1 text-xl font-semibold"
-                    >
+                    <h2 id="yarn-heading" className="text-xl font-semibold">
                       Yarn registry 与代理
                     </h2>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -1941,15 +1878,13 @@ function App() {
                       版本查看用户、明确选择项目与环境变量来源。
                     </p>
                   </div>
-                  <Button
-                    disabled={scanState === "loading"}
-                    onClick={scanYarn}
-                    variant="outline"
-                  >
+                  <Button disabled={scanState === "loading"} onClick={scanYarn}>
                     <RefreshCw aria-hidden="true" />
                     扫描 Yarn
                   </Button>
                 </div>
+
+                {!yarnResult ? <ToolIdleState toolLabel="Yarn" /> : null}
 
                 {yarnResult ? (
                   <>
@@ -1995,7 +1930,7 @@ function App() {
                     </div>
 
                     {yarnResult.diagnostics.length ? (
-                      <section className="mt-5 border-l-2 border-warning bg-warning/5 px-4 py-3">
+                      <section className="mt-5 border-l border-warning bg-warning/5 px-4 py-3">
                         <h3 className="text-sm font-medium">需要注意</h3>
                         <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
                           {yarnResult.diagnostics.map((diagnostic) => (
@@ -2007,7 +1942,7 @@ function App() {
                   </>
                 ) : null}
 
-                <p className="mt-5 border-l-2 border-border px-4 py-3 text-xs text-muted-foreground">
+                <p className="mt-5 border-l border-border px-4 py-3 text-xs text-muted-foreground">
                   只读取由已检测版本确定的配置格式和允许的环境变量；不会读取认证项、
                   缓存、lockfile、工作区文件或依赖内容。
                 </p>
@@ -2018,10 +1953,7 @@ function App() {
               <section id="pip" aria-labelledby="pip-heading" className="pb-8">
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      工具配置 / 只读扫描
-                    </p>
-                    <h2 id="pip-heading" className="mt-1 text-xl font-semibold">
+                    <h2 id="pip-heading" className="text-xl font-semibold">
                       pip index 与代理
                     </h2>
                     <p className="mt-2 text-sm text-muted-foreground">
@@ -2029,15 +1961,13 @@ function App() {
                       虚拟环境与环境变量中的 index 和代理来源。
                     </p>
                   </div>
-                  <Button
-                    disabled={scanState === "loading"}
-                    onClick={scanPip}
-                    variant="outline"
-                  >
+                  <Button disabled={scanState === "loading"} onClick={scanPip}>
                     <RefreshCw aria-hidden="true" />
                     扫描 pip
                   </Button>
                 </div>
+
+                {!pipResult ? <ToolIdleState toolLabel="pip" /> : null}
 
                 {pipResult ? (
                   <>
@@ -2083,7 +2013,7 @@ function App() {
                     </div>
 
                     {pipResult.diagnostics.length ? (
-                      <section className="mt-5 border-l-2 border-warning bg-warning/5 px-4 py-3">
+                      <section className="mt-5 border-l border-warning bg-warning/5 px-4 py-3">
                         <h3 className="text-sm font-medium">需要注意</h3>
                         <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
                           {pipResult.diagnostics.map((diagnostic) => (
@@ -2095,7 +2025,7 @@ function App() {
                   </>
                 ) : null}
 
-                <p className="mt-5 border-l-2 border-border px-4 py-3 text-xs text-muted-foreground">
+                <p className="mt-5 border-l border-border px-4 py-3 text-xs text-muted-foreground">
                   只读取约定的 pip.ini 路径与允许的 PIP_*
                   环境变量；不会读取认证项、 缓存、requirements、已安装包或
                   PIP_CONFIG_FILE 指向的任意文件。
@@ -2111,12 +2041,9 @@ function App() {
               >
                 <div className="flex flex-wrap items-end justify-between gap-4">
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">
-                      工具配置 / 只读扫描
-                    </p>
                     <h2
                       id="flutter-pub-heading"
-                      className="mt-1 text-xl font-semibold"
+                      className="text-xl font-semibold"
                     >
                       Flutter/Pub
                     </h2>
@@ -2128,7 +2055,6 @@ function App() {
                   <Button
                     disabled={scanState === "loading"}
                     onClick={scanFlutterPub}
-                    variant="outline"
                   >
                     <RefreshCw aria-hidden="true" />
                     扫描 Flutter/Pub
@@ -2177,7 +2103,7 @@ function App() {
                     </div>
 
                     {flutterPubResult.diagnostics.length ? (
-                      <section className="mt-5 border-l-2 border-warning bg-warning/5 px-4 py-3">
+                      <section className="mt-5 border-l border-warning bg-warning/5 px-4 py-3">
                         <h3 className="text-sm font-medium">需要注意</h3>
                         <ul className="mt-2 grid gap-1 text-sm text-muted-foreground">
                           {flutterPubResult.diagnostics.map((diagnostic) => (
@@ -2195,12 +2121,9 @@ function App() {
                 >
                   <div className="flex flex-wrap items-end justify-between gap-4">
                     <div>
-                      <p className="text-xs font-medium text-muted-foreground">
-                        安全变更
-                      </p>
                       <h3
                         id="flutter-pub-edit-heading"
-                        className="mt-1 text-base font-semibold"
+                        className="text-base font-semibold"
                       >
                         用户级 hosted 源
                       </h3>
@@ -2279,12 +2202,9 @@ function App() {
                   >
                     <div className="flex flex-wrap items-end justify-between gap-3">
                       <div>
-                        <p className="text-xs font-medium text-muted-foreground">
-                          只读预览
-                        </p>
                         <h3
                           id="flutter-pub-plan-heading"
-                          className="mt-1 text-base font-semibold"
+                          className="text-base font-semibold"
                         >
                           将要发生的变更
                         </h3>
@@ -2323,7 +2243,7 @@ function App() {
                           </div>
                         </div>
                         {change.risk ? (
-                          <p className="mt-3 border-l-2 border-warning pl-2 text-xs text-warning">
+                          <p className="mt-3 border-l border-warning pl-2 text-xs text-warning">
                             {change.risk}
                           </p>
                         ) : null}
@@ -2333,7 +2253,7 @@ function App() {
                 ) : null}
 
                 {flutterPubSnapshotId ? (
-                  <section className="mt-6 flex flex-wrap items-center justify-between gap-3 border-l-2 border-primary bg-primary/5 px-4 py-3">
+                  <section className="mt-6 flex flex-wrap items-center justify-between gap-3 border-l border-primary bg-primary/5 px-4 py-3">
                     <div>
                       <p className="text-sm font-medium">
                         已创建 Flutter/Pub 可恢复快照
@@ -2381,13 +2301,23 @@ function App() {
                 <div aria-live="polite" className="operation-status">
                   {scanState === "loading" && operationTool === activeTool ? (
                     <>
-                      <LoaderCircle aria-hidden="true" className="animate-spin" />
+                      <LoaderCircle
+                        aria-hidden="true"
+                        className="animate-spin"
+                      />
                       <span>正在读取本机配置…</span>
                     </>
                   ) : scanState === "error" && operationTool === activeTool ? (
                     <>
                       <TriangleAlert aria-hidden="true" />
-                      <span>{errorMessage}</span>
+                      <div className="operation-error">
+                        <span>读取失败，未修改任何配置。</span>
+                        <small>请检查工具安装或配置路径后重试。</small>
+                        <details>
+                          <summary>技术详情</summary>
+                          <code>{errorMessage}</code>
+                        </details>
+                      </div>
                     </>
                   ) : activeToolResult ? (
                     <>
@@ -2401,19 +2331,6 @@ function App() {
                     </>
                   )}
                 </div>
-
-                <Button
-                  className="w-full"
-                  disabled={scanState === "loading"}
-                  onClick={() => void scanActiveTool()}
-                >
-                  {scanState === "loading" && operationTool === activeTool ? (
-                    <LoaderCircle aria-hidden="true" className="animate-spin" />
-                  ) : (
-                    <ScanLine aria-hidden="true" />
-                  )}
-                  扫描配置
-                </Button>
               </section>
 
               <section className="inspector-section">
@@ -2456,9 +2373,7 @@ function App() {
                   </div>
                   <div className="plan-summary">
                     <Layers3 aria-hidden="true" />
-                    <p>
-                      已生成只读差异。确认前不会写入任何配置文件。
-                    </p>
+                    <p>已生成只读差异。确认前不会写入任何配置文件。</p>
                   </div>
                 </section>
               ) : null}

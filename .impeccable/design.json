@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-11T16:30:00+08:00",
+  "title": "Design System: MirrorIt",
+  "extensions": {
+    "colorMeta": {
+      "signal-blue-light": {
+        "role": "primary",
+        "displayName": "Signal Blue Light",
+        "canonical": "#087ff5",
+        "tonalRamp": [
+          "#05294d",
+          "#063d73",
+          "#075199",
+          "#0765c4",
+          "#087ff5",
+          "#55a8fa",
+          "#a1d0fd",
+          "#e6f3ff"
+        ]
+      },
+      "signal-blue-dark": {
+        "role": "primary",
+        "displayName": "Signal Blue Dark",
+        "canonical": "#0a84ff",
+        "tonalRamp": [
+          "#05294d",
+          "#063e74",
+          "#07539b",
+          "#0869c8",
+          "#0a84ff",
+          "#58abff",
+          "#a3d1ff",
+          "#e7f4ff"
+        ]
+      },
+      "cold-fog": {
+        "role": "neutral",
+        "displayName": "Cold Fog",
+        "canonical": "#f2f3f5",
+        "tonalRamp": [
+          "#242527",
+          "#3f4144",
+          "#5d5f63",
+          "#7d8085",
+          "#a1a4aa",
+          "#c3c6cb",
+          "#e1e3e7",
+          "#f2f3f5"
+        ]
+      },
+      "graphite": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "canonical": "#1c1d1f",
+        "tonalRamp": [
+          "#1c1d1f",
+          "#303235",
+          "#484a4e",
+          "#63656a",
+          "#81848a",
+          "#a4a7ad",
+          "#cdd0d5",
+          "#f3f4f6"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Workspace Headline",
+        "purpose": "Names the active desktop tool workspace."
+      },
+      "title": {
+        "displayName": "Section Title",
+        "purpose": "Separates operational regions without marketing-scale type."
+      },
+      "body": {
+        "displayName": "Desktop Body",
+        "purpose": "Primary descriptions, forms and status content."
+      },
+      "label": {
+        "displayName": "Compact Label",
+        "purpose": "Navigation and inspector metadata."
+      },
+      "code": {
+        "displayName": "Configuration Code",
+        "purpose": "URLs, paths, values and snapshot identifiers."
+      }
+    },
+    "shadows": [
+      {
+        "name": "contact",
+        "value": "0 1px 2px rgb(0 0 0 / 12%)",
+        "purpose": "Primary button contact depth only."
+      },
+      {
+        "name": "mark",
+        "value": "0 1px 3px rgb(0 0 0 / 18%)",
+        "purpose": "Application mark depth only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state",
+        "value": "150ms ease-out",
+        "purpose": "Color and surface state transitions."
+      },
+      {
+        "name": "press",
+        "value": "100ms ease-out",
+        "purpose": "Interruptible 0.98 press feedback."
+      }
+    ],
+    "breakpoints": [
+      { "name": "compact-workspace", "value": "1100px" },
+      { "name": "icon-sidebar", "value": "760px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single primary command in an operational region.",
+      "html": "<button class=\"ds-btn-primary\">扫描配置</button>",
+      "css": ".ds-btn-primary { height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; background: var(--primary, #087ff5); color: var(--primary-foreground, #fff); font: 500 14px/1.5 system-ui, sans-serif; box-shadow: 0 1px 2px rgb(0 0 0 / 12%); transition: background-color 150ms ease-out, transform 100ms ease-out; } .ds-btn-primary:hover { filter: brightness(.96); } .ds-btn-primary:focus-visible { outline: 2px solid color-mix(in srgb, var(--ring, #087ff5) 35%, transparent); outline-offset: 1px; } .ds-btn-primary:active { transform: scale(.98); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary command for previews, exports and recovery.",
+      "html": "<button class=\"ds-btn-outline\">查看差异</button>",
+      "css": ".ds-btn-outline { height: 32px; padding: 0 10px; border: 1px solid var(--border, #d9dce1); border-radius: 6px; background: var(--background, #fff); color: var(--foreground, #202124); font: 500 14px/1.5 system-ui, sans-serif; transition: background-color 150ms ease-out, transform 100ms ease-out; } .ds-btn-outline:hover { background: var(--muted, #eceef1); } .ds-btn-outline:focus-visible { outline: 2px solid color-mix(in srgb, var(--ring, #087ff5) 35%, transparent); outline-offset: 1px; } .ds-btn-outline:active { transform: scale(.98); }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Desktop field for paths, URLs and configuration values.",
+      "html": "<input class=\"ds-input\" value=\"https://registry.npmjs.org/\" aria-label=\"Registry\">",
+      "css": ".ds-input { width: 320px; height: 36px; padding: 0 12px; border: 1px solid var(--input, #cfd3d9); border-radius: 6px; background: var(--card, #fff); color: var(--foreground, #202124); font: 400 14px/1.5 system-ui, sans-serif; } .ds-input:hover { border-color: var(--muted-foreground, #636871); } .ds-input:focus-visible { border-color: var(--ring, #087ff5); outline: 3px solid color-mix(in srgb, var(--ring, #087ff5) 30%, transparent); }"
+    },
+    {
+      "name": "Tool Navigation Item",
+      "kind": "nav",
+      "description": "Stable tool selector with capability and read state.",
+      "html": "<button class=\"ds-tool-nav\"><span class=\"ds-tool-glyph\">N</span><span><strong>npm</strong><small>可管理</small></span><i aria-label=\"已读取\"></i></button>",
+      "css": ".ds-tool-nav { display: grid; grid-template-columns: 32px 1fr 6px; width: 190px; min-height: 44px; align-items: center; gap: 10px; padding: 6px 8px; border: 0; border-radius: 6px; background: var(--sidebar-accent, #e7effb); color: var(--accent-foreground, #173a63); text-align: left; transition: background-color 150ms ease-out, transform 100ms ease-out; } .ds-tool-nav:hover { background: var(--muted, #eceef1); } .ds-tool-nav:focus-visible { outline: 2px solid color-mix(in srgb, var(--ring, #087ff5) 42%, transparent); } .ds-tool-nav:active { transform: scale(.985); } .ds-tool-glyph { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 6px; background: color-mix(in srgb, var(--primary, #087ff5) 11%, var(--card, #fff)); color: var(--primary, #087ff5); font: 750 11px/1 system-ui, sans-serif; } .ds-tool-nav strong, .ds-tool-nav small { display: block; } .ds-tool-nav strong { font: 600 13px/1.3 system-ui, sans-serif; } .ds-tool-nav small { color: var(--muted-foreground, #636871); font: 400 11px/1.3 system-ui, sans-serif; } .ds-tool-nav i { width: 6px; height: 6px; border-radius: 50%; background: var(--success, #25a95b); }"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "description": "Short text-backed scan or precedence state.",
+      "html": "<span class=\"ds-chip\">最终生效</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; min-height: 20px; padding: 2px 6px; border-radius: 999px; background: color-mix(in srgb, var(--primary, #087ff5) 10%, transparent); color: var(--primary, #087ff5); font: 600 11px/1.3 system-ui, sans-serif; }"
+    },
+    {
+      "name": "Source Ledger",
+      "kind": "custom",
+      "description": "The signature provenance track for configuration precedence.",
+      "html": "<ol class=\"ds-ledger\"><li><b>用户级 · C:\\Users\\demo\\.npmrc</b><small>优先级 30 · 被覆盖</small></li><li data-effective=\"true\"><b>环境变量 · NPM_CONFIG_REGISTRY</b><small>优先级 40 · 最终生效</small></li></ol>",
+      "css": ".ds-ledger { position: relative; display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; color: var(--foreground, #202124); } .ds-ledger::before { position: absolute; top: 12px; bottom: 12px; left: 4px; width: 1px; background: color-mix(in srgb, var(--primary, #087ff5) 68%, var(--border, #d9dce1)); content: ''; } .ds-ledger li { position: relative; display: grid; gap: 4px; padding: 6px 0 6px 20px; } .ds-ledger li::before { position: absolute; top: 12px; left: 0; width: 9px; height: 9px; border: 1px solid var(--primary, #087ff5); border-radius: 50%; background: var(--card, #fff); content: ''; } .ds-ledger li[data-effective='true']::before { background: var(--primary, #087ff5); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary, #087ff5) 12%, transparent); } .ds-ledger b { font: 600 12px/1.5 system-ui, sans-serif; } .ds-ledger small { color: var(--muted-foreground, #636871); font: 400 11px/1.5 system-ui, sans-serif; }"
+    },
+    {
+      "name": "Inspector Section",
+      "kind": "custom",
+      "description": "Context summary for sources, plans, recovery and errors.",
+      "html": "<section class=\"ds-inspector\"><header><strong>来源概览</strong><span>5 条轨迹</span></header><p>已读取 3 项配置</p></section>",
+      "css": ".ds-inspector { width: 256px; padding: 16px; border-block: 1px solid var(--hairline, rgb(32 33 36 / 10%)); background: var(--inspector, rgb(249 250 251 / 92%)); color: var(--foreground, #202124); font: 400 12px/1.5 system-ui, sans-serif; } .ds-inspector header { display: flex; justify-content: space-between; gap: 12px; } .ds-inspector strong { font-weight: 650; } .ds-inspector span, .ds-inspector p { color: var(--muted-foreground, #636871); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Signal Ledger",
+    "overview": "MirrorIt 像一张安静、可信的本机配置账本：界面先解释值从哪里来，再允许用户采取动作。冷雾浅色面与石墨深色面保持低噪声，系统蓝只标记主操作、当前选择和来源路径；半透明只用于标题栏、导航和检查器等结构层，不覆盖需要精确阅读的配置内容。\n\n布局服务于长期桌面操作而不是展示。信息密度紧凑但不拥挤，来源优先级、覆盖关系、预览、快照和恢复始终形成连续的安全叙事。Apple 式原则体现在克制材质、清晰层级和自然反馈中，同时保留 Windows 用户熟悉的控件、键盘顺序和操作效率。",
+    "keyCharacteristics": [
+      "冷雾与石墨双主题，单一系统蓝承担交互信号。",
+      "三栏桌面骨架，中央来源账本是视觉与任务中心。",
+      "细分隔线、紧凑圆角、极少阴影，内容面保持哑光清晰。",
+      "配置值使用等宽字体，长路径和 URL 截断但不破坏布局。",
+      "所有写入动作都与预览、快照和恢复状态相邻。"
+    ],
+    "rules": [
+      {
+        "name": "The Signal Rarity Rule",
+        "body": "系统蓝只用于当前选择、主要命令、焦点和来源路径，不把整块内容面染成蓝色。",
+        "section": "colors"
+      },
+      {
+        "name": "The Semantic State Rule",
+        "body": "成功、警告和错误必须同时包含图标或文字，不能只依赖颜色。",
+        "section": "colors"
+      },
+      {
+        "name": "The Desktop Scale Rule",
+        "body": "工作区不使用宣传页式超大标题；标题在 20px 封顶，结构由空间和位置建立。",
+        "section": "typography"
+      },
+      {
+        "name": "The Zero Tracking Rule",
+        "body": "中文界面、按钮、导航和代码值保持零字距，不使用负字距压缩内容。",
+        "section": "typography"
+      },
+      {
+        "name": "The Matte Content Rule",
+        "body": "配置、差异和来源轨迹所在的中央内容面不使用模糊、玻璃或装饰阴影。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do 先呈现来源与最终生效值，再呈现连接检查和写入操作。",
+      "Do 让主要动作、状态和恢复路径在浅色与深色主题中都可扫描。",
+      "Do 使用 Lucide 图标、明确文字和稳定控件尺寸表达熟悉的桌面命令。",
+      "Do 在减少动态、减少透明度和高对比偏好下保留完整层级。"
+    ],
+    "donts": [
+      "Don't 把页面区段包装为一组浮动卡片或在卡片中嵌套卡片。",
+      "Don't 使用大面积单色、渐变光球、装饰插画或宣传页式巨型标题。",
+      "Don't 复制 Apple 商标、品牌资产、受限字体或 macOS 窗口控件。",
+      "Don't 用颜色代替状态文字，也不要让视觉顺序与 DOM 焦点顺序分离。",
+      "Don't 在日志、导出、来源轨迹或截图示例中暴露凭据。"
+    ]
+  }
+}

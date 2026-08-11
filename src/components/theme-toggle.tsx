@@ -16,11 +16,7 @@ export function ThemeToggle() {
   const { preference, setPreference } = useTheme();
 
   return (
-    <div
-      aria-label="主题"
-      className="theme-segmented"
-      role="radiogroup"
-    >
+    <div aria-label="主题" className="theme-segmented" role="radiogroup">
       {themeOptions.map(({ value, label, Icon }) => (
         <Button
           aria-checked={preference === value}
