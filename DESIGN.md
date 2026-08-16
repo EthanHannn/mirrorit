@@ -2,49 +2,49 @@
 name: MirrorIt
 description: 本地优先、来源可解释且变更可恢复的桌面配置工作台
 colors:
-  signal-blue-light: "#087ff5"
-  signal-blue-dark: "#0a84ff"
-  cold-fog: "#f2f3f5"
+  signal-indigo-light: "#4f46e5"
+  signal-indigo-dark: "#818cf8"
+  warm-paper: "#f6f6f4"
   paper-white: "#ffffff"
-  graphite: "#1c1d1f"
-  graphite-raised: "#27292c"
-  ink: "#202124"
-  ink-inverse: "#f3f4f6"
-  muted-light: "#636871"
-  muted-dark: "#aeb3bb"
-  hairline-light: "rgb(32 33 36 / 10%)"
-  hairline-dark: "rgb(255 255 255 / 11%)"
-  success-light: "#25a95b"
-  success-dark: "#30d158"
-  warning-light: "#b25000"
-  warning-dark: "#ff9f0a"
+  graphite: "#131316"
+  graphite-raised: "#1a1a1f"
+  ink: "#1b1b1f"
+  ink-inverse: "#ecedf0"
+  muted-light: "#61616b"
+  muted-dark: "#9c9ca8"
+  hairline-light: "rgb(27 27 31 / 8%)"
+  hairline-dark: "rgb(255 255 255 / 8%)"
+  success-light: "#15803d"
+  success-dark: "#4ade80"
+  warning-light: "#b45309"
+  warning-dark: "#fbbf24"
 typography:
   headline:
-    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans CJK SC, PingFang SC, Microsoft YaHei, Noto Sans, sans-serif"
     fontSize: "20px"
     fontWeight: 600
     lineHeight: 1.5
     letterSpacing: "0"
   title:
-    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans CJK SC, PingFang SC, Microsoft YaHei, Noto Sans, sans-serif"
     fontSize: "16px"
     fontWeight: 600
     lineHeight: 1.5
     letterSpacing: "0"
   body:
-    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans CJK SC, PingFang SC, Microsoft YaHei, Noto Sans, sans-serif"
     fontSize: "14px"
     fontWeight: 400
     lineHeight: 1.5
     letterSpacing: "0"
   label:
-    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif"
+    fontFamily: "-apple-system, BlinkMacSystemFont, Segoe UI, Noto Sans CJK SC, PingFang SC, Microsoft YaHei, Noto Sans, sans-serif"
     fontSize: "12px"
     fontWeight: 600
     lineHeight: 1.5
     letterSpacing: "0"
   code:
-    fontFamily: "JetBrains Mono, Consolas, monospace"
+    fontFamily: "JetBrains Mono, Cascadia Code, Noto Sans Mono CJK SC, Consolas, DejaVu Sans Mono, monospace"
     fontSize: "12px"
     fontWeight: 400
     lineHeight: 1.5
@@ -61,7 +61,7 @@ spacing:
   xxl: "32px"
 components:
   button-primary:
-    backgroundColor: "{colors.signal-blue-light}"
+    backgroundColor: "{colors.signal-indigo-light}"
     textColor: "{colors.paper-white}"
     rounded: "{rounded.control}"
     padding: "0 10px"
@@ -86,13 +86,13 @@ components:
 
 **Creative North Star: "The Signal Ledger"**
 
-MirrorIt 像一张安静、可信的本机配置账本：界面先解释值从哪里来，再允许用户采取动作。冷雾浅色面与石墨深色面保持低噪声，系统蓝只标记主操作、当前选择和来源路径；半透明只用于标题栏、导航和检查器等结构层，不覆盖需要精确阅读的配置内容。
+MirrorIt 像一张安静、可信的本机配置账本：界面先解释值从哪里来，再允许用户采取动作。暖纸白浅色面与分层石墨深色面保持低噪声，信号靛蓝只标记主操作、当前选择和来源路径；半透明只用于标题栏结构层，不覆盖需要精确阅读的配置内容。
 
 布局服务于长期桌面操作而不是展示。信息密度紧凑但不拥挤，来源优先级、覆盖关系、预览、快照和恢复始终形成连续的安全叙事。Apple 式原则体现在克制材质、清晰层级和自然反馈中，同时保留 Windows 用户熟悉的控件、键盘顺序和操作效率。
 
 **Key Characteristics:**
 
-- 冷雾与石墨双主题，单一系统蓝承担交互信号。
+- 暖纸白与石墨双主题，单一信号靛蓝承担交互信号。
 - 三栏桌面骨架，中央来源账本是视觉与任务中心。
 - 细分隔线、紧凑圆角、极少阴影，内容面保持哑光清晰。
 - 配置值使用等宽字体，长路径和 URL 截断但不破坏布局。
@@ -104,11 +104,11 @@ MirrorIt 像一张安静、可信的本机配置账本：界面先解释值从�
 
 ### Primary
 
-- **Signal Blue:** 主操作、选中状态、焦点和来源轨迹；浅深主题分别使用对应令牌。
+- **Signal Indigo:** 主操作、选中状态、焦点和来源轨迹；浅深主题分别使用对应令牌。
 
 ### Neutral
 
-- **Cold Fog / Paper White:** 浅色主题的应用背景与中央内容面。
+- **Warm Paper / Paper White:** 浅色主题的应用背景与中央内容面。
 - **Graphite / Graphite Raised:** 深色主题的应用背景与抬高控件面。
 - **Ink / Inverse Ink:** 浅色和深色主题的主要文本。
 - **Muted Ink:** 辅助说明、路径元信息和未激活导航。
@@ -116,7 +116,7 @@ MirrorIt 像一张安静、可信的本机配置账本：界面先解释值从�
 
 ### Named Rules
 
-**The Signal Rarity Rule.** 系统蓝只用于当前选择、主要命令、焦点和来源路径，不把整块内容面染成蓝色。
+**The Signal Rarity Rule.** 信号靛蓝只用于当前选择、主要命令、焦点和来源路径，不把整块内容面染成强调色。
 
 **The Semantic State Rule.** 成功、警告和错误必须同时包含图标或文字，不能只依赖颜色。
 
@@ -172,7 +172,7 @@ MirrorIt 像一张安静、可信的本机配置账本：界面先解释值从�
 ### Buttons
 
 - **Shape:** 紧凑 6px 圆角，默认高 32px，图标与文字间距 6px。
-- **Primary:** Signal Blue 背景、白色文字和轻微接触阴影；每个工具只有一个明确主动作。
+- **Primary:** Signal Indigo 背景、高对比文字和轻微接触阴影；每个工具只有一个明确主动作。
 - **Hover / Focus:** 150ms 颜色过渡，焦点使用蓝色边框与半透明双像素环，按下缩放到 98%。
 - **Outline / Ghost:** 次要命令使用细边框或透明背景，悬停只提升中性色对比。
 
@@ -192,7 +192,7 @@ MirrorIt 像一张安静、可信的本机配置账本：界面先解释值从�
 ### Inputs / Fields
 
 - **Style:** 36px 高、6px 圆角、纯色内容面和 1px 输入边框。
-- **Focus:** 边框切换为 Signal Blue，并显示半透明 3px 焦点环。
+- **Focus:** 边框切换为 Signal Indigo，并显示半透明 3px 焦点环。
 - **Error / Disabled:** 错误使用语义红色边框并保留文字说明；禁用态降低不透明度但保持可辨识标签。
 
 ### Navigation

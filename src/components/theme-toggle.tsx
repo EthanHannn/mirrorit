@@ -16,11 +16,15 @@ export function ThemeToggle() {
   const { preference, setPreference } = useTheme();
 
   return (
-    <div aria-label="主题" className="theme-segmented" role="radiogroup">
+    <div
+      aria-label="主题"
+      className="flex items-center gap-0.5 rounded-md border border-border bg-muted/60 p-0.5"
+      role="radiogroup"
+    >
       {themeOptions.map(({ value, label, Icon }) => (
         <Button
           aria-checked={preference === value}
-          className="theme-segment"
+          className="h-7 rounded px-2 text-xs"
           key={value}
           onClick={() => setPreference(value)}
           role="radio"
@@ -28,7 +32,7 @@ export function ThemeToggle() {
           variant={preference === value ? "secondary" : "ghost"}
         >
           <Icon aria-hidden="true" className="size-3.5" />
-          {label}
+          <span className="max-[760px]:hidden">{label}</span>
         </Button>
       ))}
     </div>
