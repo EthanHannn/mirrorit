@@ -1,4 +1,5 @@
 import { Save } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import type { ChangePlan } from "@/lib/types";
 
@@ -17,8 +18,14 @@ export function PlanPreview({
   onApply,
   removedLabel = "移除",
 }: PlanPreviewProps) {
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (section.current?.closest("[hidden]")) return;
+    section.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, [plan.id]);
   return (
     <section
+      ref={section}
       aria-labelledby={headingId}
       className="border-b border-border py-6"
     >
@@ -30,7 +37,10 @@ export function PlanPreview({
           <span className="text-xs text-muted-foreground">
             {plan.changes.length} 项字段
           </span>
-          <Button disabled={applying} onClick={onApply}>
+          <Button
+            disabled={applying || plan.changes.length === 0}
+            onClick={onApply}
+          >
             <Save aria-hidden="true" />
             确认应用
           </Button>
@@ -51,13 +61,13 @@ export function PlanPreview({
             <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
               <div className="rounded-md bg-muted px-2.5 py-2">
                 <p className="mb-1 text-muted-foreground">当前值</p>
-                <code className="block truncate font-mono">
+                <code className="block break-all font-mono">
                   {change.previous_value ?? "未设置"}
                 </code>
               </div>
               <div className="rounded-md bg-primary/5 px-2.5 py-2">
                 <p className="mb-1 text-primary">新值</p>
-                <code className="block truncate font-mono">
+                <code className="block break-all font-mono">
                   {change.next_value ?? removedLabel}
                 </code>
               </div>

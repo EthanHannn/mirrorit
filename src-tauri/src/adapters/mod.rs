@@ -15,6 +15,7 @@ pub mod maven_xml;
 pub mod npm;
 pub mod pip;
 pub mod pnpm;
+pub(crate) mod url;
 pub mod yarn;
 
 pub struct PlanRequest<'a> {

@@ -10,6 +10,7 @@ import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { useConfirm } from "@/hooks/use-confirm";
 import type { ToolAction, ToolScan } from "@/hooks/use-tool-scan";
 import * as api from "@/lib/api";
+import { applyAndRefresh } from "@/lib/operations";
 import { getToolMeta } from "@/lib/tools";
 import type { ChangePlan } from "@/lib/types";
 
@@ -47,6 +48,7 @@ export function MavenWorkspace({
 
   async function handleScan() {
     await operate(async () => {
+      setPlan(null);
       const result = await api.scanTool(meta, "");
       const mirrorIds = Object.entries(result.effective_config.values)
         .filter(
@@ -65,6 +67,7 @@ export function MavenWorkspace({
 
   async function previewMirror() {
     await operate(async () => {
+      setPlan(null);
       const [result, preview] = await Promise.all([
         api.scanTool(meta, ""),
         api.previewMavenMirrorUpdate({
@@ -90,11 +93,12 @@ export function MavenWorkspace({
     }
 
     await operate(async () => {
-      const applied = await api.applyMavenPreview(plan.id);
-      const result = await api.scanTool(meta, "");
-      setSnapshotId(applied.snapshot.id);
-      setPlan(null);
-      return result;
+      return applyAndRefresh(
+        () => api.applyMavenPreview(plan.id),
+        setSnapshotId,
+        () => setPlan(null),
+        () => api.scanTool(meta, ""),
+      );
     });
   }
 
@@ -113,14 +117,16 @@ export function MavenWorkspace({
     await operate(async () => {
       await api.rollbackMavenSnapshot(snapshotId);
       setSnapshotId(null);
+      setPlan(null);
       return api.scanTool(meta, "");
     });
   }
 
   return (
-    <div className="pb-8">
+    <fieldset disabled={loading} className="min-w-0 pb-8">
       <WorkspaceHeader
         description={meta.description}
+        hasResult={scan.result !== null}
         loading={loading}
         onScan={() => void handleScan()}
         scanLabel={meta.scanLabel}
@@ -155,7 +161,10 @@ export function MavenWorkspace({
             <label className="grid gap-1.5 text-sm font-medium">
               <span>目标镜像</span>
               <Select
-                onChange={(event) => setMirrorId(event.target.value)}
+                onChange={(event) => {
+                  setMirrorId(event.target.value);
+                  setPlan(null);
+                }}
                 value={mirrorId}
               >
                 {mirrorEntries.map(([key, value]) => (
@@ -168,7 +177,10 @@ export function MavenWorkspace({
             <label className="grid gap-1.5 text-sm font-medium">
               <span>新镜像 URL</span>
               <Input
-                onChange={(event) => setMirrorUrl(event.target.value)}
+                onChange={(event) => {
+                  setMirrorUrl(event.target.value);
+                  setPlan(null);
+                }}
                 placeholder="https://repo.example.com/maven/"
                 value={mirrorUrl}
               />
@@ -198,6 +210,6 @@ export function MavenWorkspace({
           snapshotId={snapshotId}
         />
       ) : null}
-    </div>
+    </fieldset>
   );
 }

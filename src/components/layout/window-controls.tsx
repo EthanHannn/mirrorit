@@ -8,10 +8,7 @@ const isTauri = "__TAURI_INTERNALS__" in window;
 const controlClass =
   "grid h-full w-11 shrink-0 place-items-center text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:bg-muted";
 
-/**
- * Frameless-window controls. Rendered only inside the Tauri runtime; plain
- * browser previews (vite dev) keep the native browser chrome instead.
- */
+// 仅桌面运行时显示窗口控件，浏览器预览保留浏览器自身的窗口边框。
 export function WindowControls() {
   const [maximized, setMaximized] = useState(false);
 
@@ -36,7 +33,10 @@ export function WindowControls() {
   const appWindow = getCurrentWindow();
 
   return (
-    <div className="-mr-4 flex h-full items-stretch">
+    <div
+      className="flex h-full items-stretch"
+      onDoubleClick={(event) => event.stopPropagation()}
+    >
       <button
         aria-label="最小化"
         className={controlClass}

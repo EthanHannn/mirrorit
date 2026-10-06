@@ -9,6 +9,7 @@ import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { useConfirm } from "@/hooks/use-confirm";
 import type { ToolAction, ToolScan } from "@/hooks/use-tool-scan";
 import * as api from "@/lib/api";
+import { applyAndRefresh } from "@/lib/operations";
 import { getToolMeta } from "@/lib/tools";
 import type { ChangePlan } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -50,11 +51,15 @@ export function FlutterPubWorkspace({
   const loading = scan.status === "loading";
 
   async function handleScan() {
-    await operate(() => api.scanTool(meta, projectDirectory));
+    await operate(() => {
+      setPlan(null);
+      return api.scanTool(meta, projectDirectory);
+    });
   }
 
   async function previewHosted() {
     await operate(async () => {
+      setPlan(null);
       const [result, preview] = await Promise.all([
         api.scanTool(meta, projectDirectory),
         api.previewFlutterPubHostedUpdate({
@@ -80,11 +85,12 @@ export function FlutterPubWorkspace({
     }
 
     await operate(async () => {
-      const applied = await api.applyFlutterPubPreview(plan.id);
-      const result = await api.scanTool(meta, projectDirectory);
-      setSnapshotId(applied.snapshot.id);
-      setPlan(null);
-      return result;
+      return applyAndRefresh(
+        () => api.applyFlutterPubPreview(plan.id),
+        setSnapshotId,
+        () => setPlan(null),
+        () => api.scanTool(meta, projectDirectory),
+      );
     });
   }
 
@@ -104,14 +110,16 @@ export function FlutterPubWorkspace({
     await operate(async () => {
       await api.rollbackFlutterPubSnapshot(snapshotId);
       setSnapshotId(null);
+      setPlan(null);
       return api.scanTool(meta, projectDirectory);
     });
   }
 
   return (
-    <div className="pb-8">
+    <fieldset disabled={loading} className="min-w-0 pb-8">
       <WorkspaceHeader
         description={meta.description}
+        hasResult={scan.result !== null}
         loading={loading}
         onScan={() => void handleScan()}
         scanLabel={meta.scanLabel}
@@ -145,7 +153,10 @@ export function FlutterPubWorkspace({
           <button
             aria-pressed={profile === "official"}
             className={profileCardClass(profile === "official")}
-            onClick={() => setProfile("official")}
+            onClick={() => {
+              setProfile("official");
+              setPlan(null);
+            }}
             type="button"
           >
             <p className="text-sm font-medium">官方源</p>
@@ -159,7 +170,10 @@ export function FlutterPubWorkspace({
           <button
             aria-pressed={profile === "custom"}
             className={profileCardClass(profile === "custom")}
-            onClick={() => setProfile("custom")}
+            onClick={() => {
+              setProfile("custom");
+              setPlan(null);
+            }}
             type="button"
           >
             <p className="text-sm font-medium">自定义源</p>
@@ -172,7 +186,10 @@ export function FlutterPubWorkspace({
           <label className="mt-4 grid gap-1.5 text-sm font-medium">
             <span>自定义 hosted URL</span>
             <Input
-              onChange={(event) => setHostedUrl(event.target.value)}
+              onChange={(event) => {
+                setHostedUrl(event.target.value);
+                setPlan(null);
+              }}
               placeholder="https://packages.example.com/"
               value={hostedUrl}
             />
@@ -202,6 +219,6 @@ export function FlutterPubWorkspace({
           snapshotId={snapshotId}
         />
       ) : null}
-    </div>
+    </fieldset>
   );
 }

@@ -4,16 +4,18 @@ export function EmptyState({ toolLabel }: { toolLabel: string }) {
   return (
     <section
       aria-label={`${toolLabel} 未扫描`}
-      className="mt-6 flex min-h-28 items-center gap-3 border-y border-hairline py-5"
+      className="my-5 flex min-h-32 items-center gap-5 rounded-lg bg-muted/55 px-5 py-6"
     >
       <PackageSearch
         aria-hidden="true"
-        className="size-5 shrink-0 text-muted-foreground"
+        className="size-9 shrink-0 stroke-[1.25] text-primary/70"
       />
       <div>
-        <p className="text-sm font-semibold">尚未扫描 {toolLabel}</p>
-        <span className="mt-0.5 block text-xs text-muted-foreground">
-          扫描后将按优先级展示生效值与来源轨迹。
+        <p className="text-sm font-semibold">
+          从了解 {toolLabel} 的当前配置开始
+        </p>
+        <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">
+          点击上方扫描，查看生效地址与来源。扫描只读取配置，不会修改文件。
         </span>
       </div>
     </section>

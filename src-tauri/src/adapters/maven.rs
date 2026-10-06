@@ -493,10 +493,7 @@ fn file_checksum(path: &Path) -> AdapterResult<String> {
 
 fn validate_mirror_url(value: &str) -> AdapterResult<()> {
     let value = value.trim();
-    if !value.starts_with("https://")
-        || value[8..].contains('@')
-        || value.contains(char::is_whitespace)
-    {
+    if !crate::adapters::url::is_safe_https_url(value) {
         return Err(AdapterError {
             code: AdapterErrorCode::InvalidInput,
             message: "Maven 镜像 URL 必须是未含凭据的 HTTPS 地址。".into(),
@@ -516,12 +513,7 @@ fn write_atomic(path: &Path, content: &[u8], snapshot: &SnapshotRef) -> AdapterR
         code: AdapterErrorCode::IoFailure,
         message: format!("无法写入临时 Maven 配置：{error}"),
     })?;
-    if path.exists() {
-        fs::remove_file(path).map_err(|error| AdapterError {
-            code: AdapterErrorCode::IoFailure,
-            message: format!("无法替换 Maven settings.xml：{error}"),
-        })?;
-    }
+    // 同目录重命名直接替换，失败时保留原文件。
     fs::rename(&temporary_path, path).map_err(|error| AdapterError {
         code: AdapterErrorCode::IoFailure,
         message: format!("无法完成 Maven 配置替换：{error}"),

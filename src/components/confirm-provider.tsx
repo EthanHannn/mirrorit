@@ -1,5 +1,11 @@
 import { AlertDialog } from "radix-ui";
-import { type ReactNode, useCallback, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmContext, type ConfirmOptions } from "@/hooks/use-confirm";
 
@@ -9,17 +15,27 @@ type ConfirmRequest = ConfirmOptions & {
 
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [request, setRequest] = useState<ConfirmRequest | null>(null);
+  const pending = useRef<ConfirmRequest | null>(null);
+  useEffect(
+    () => () => {
+      pending.current?.resolve(false);
+    },
+    [],
+  );
 
   const confirm = useCallback(
     (options: ConfirmOptions) =>
       new Promise<boolean>((resolve) => {
-        setRequest({ ...options, resolve });
+        pending.current?.resolve(false);
+        pending.current = { ...options, resolve };
+        setRequest(pending.current);
       }),
     [],
   );
 
   const settle = (confirmed: boolean) => {
-    request?.resolve(confirmed);
+    pending.current?.resolve(confirmed);
+    pending.current = null;
     setRequest(null);
   };
 

@@ -4,18 +4,21 @@ use crate::adapters::{yarn::YarnAdapter, ConfigAdapter};
 use crate::domain::{ReadResult, ToolContext};
 
 #[tauri::command]
-pub fn scan_yarn(project_directory: Option<String>) -> Result<ReadResult, String> {
-    let project_directory = project_directory
-        .filter(|path| !path.trim().is_empty())
-        .map(validate_project_directory)
-        .transpose()?;
+pub async fn scan_yarn(project_directory: Option<String>) -> Result<ReadResult, String> {
+    super::run_read(move || {
+        let project_directory = project_directory
+            .filter(|path| !path.trim().is_empty())
+            .map(validate_project_directory)
+            .transpose()?;
 
-    YarnAdapter::from_system()
-        .read(&ToolContext {
-            project_directory,
-            include_project_sources: true,
-        })
-        .map_err(|error| error.message)
+        YarnAdapter::from_system()
+            .read(&ToolContext {
+                project_directory,
+                include_project_sources: true,
+            })
+            .map_err(|error| error.message)
+    })
+    .await
 }
 
 fn validate_project_directory(path: String) -> Result<String, String> {

@@ -7,6 +7,7 @@ interface WorkspaceHeaderProps {
   scanLabel: string;
   loading: boolean;
   onScan: () => void;
+  hasResult?: boolean;
 }
 
 export function WorkspaceHeader({
@@ -15,12 +16,13 @@ export function WorkspaceHeader({
   scanLabel,
   loading,
   onScan,
+  hasResult = false,
 }: WorkspaceHeaderProps) {
   return (
-    <section className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-6">
-      <div>
+    <section className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-5">
+      <div className="min-w-0 flex-1 basis-48">
         <h1 className="text-xl font-semibold">{title}</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           {description}
         </p>
       </div>
@@ -30,7 +32,7 @@ export function WorkspaceHeader({
         ) : (
           <RefreshCw aria-hidden="true" />
         )}
-        {scanLabel}
+        {loading ? "正在处理…" : hasResult ? "重新扫描" : scanLabel}
       </Button>
     </section>
   );

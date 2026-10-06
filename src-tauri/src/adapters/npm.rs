@@ -331,6 +331,20 @@ impl NpmAdapter {
     ) -> AdapterResult<ChangePlan> {
         let file = path.display().to_string();
         let file_checksum = file_checksum(path)?;
+        if file_checksum != "missing" {
+            let content = fs::read_to_string(path).map_err(|_| AdapterError {
+                code: AdapterErrorCode::ParseFailure,
+                message: "目标 npm 配置无法读取为 UTF-8 文本，已拒绝生成写入预览。".into(),
+            })?;
+            let mut diagnostics = Vec::new();
+            parse_npmrc(&content, &file, &mut diagnostics);
+            if !diagnostics.is_empty() {
+                return Err(AdapterError {
+                    code: AdapterErrorCode::ParseFailure,
+                    message: "目标 npm 配置存在无法解析的行，请先修正配置后重新预览。".into(),
+                });
+            }
+        }
         let changes = profile
             .values
             .iter()
@@ -354,8 +368,9 @@ impl NpmAdapter {
                     field: field.clone(),
                     previous_value,
                     next_value: Some(next_value.as_str().to_owned()),
-                    risk: overridden
-                        .then(|| "存在更高优先级的环境变量，应用后该值可能不会生效。".into()),
+                    risk: overridden.then(|| {
+                        "存在更高优先级的项目配置或环境变量，应用后该值可能不会生效。".into()
+                    }),
                 }
             })
             .collect();
@@ -646,12 +661,7 @@ fn write_atomic(path: &Path, content: &[u8], snapshot: &SnapshotRef) -> AdapterR
         code: AdapterErrorCode::IoFailure,
         message: format!("无法写入临时配置：{error}"),
     })?;
-    if path.exists() {
-        fs::remove_file(path).map_err(|error| AdapterError {
-            code: AdapterErrorCode::IoFailure,
-            message: format!("无法替换现有配置：{error}"),
-        })?;
-    }
+    // 同目录重命名直接替换，失败时保留原文件。
     fs::rename(&temporary_path, path).map_err(|error| AdapterError {
         code: AdapterErrorCode::IoFailure,
         message: format!("无法完成配置替换：{error}"),
@@ -957,6 +967,57 @@ mod tests {
             HealthCheckStatus::AuthenticationFailure
         );
         assert_eq!(classify_http_status(503), HealthCheckStatus::HttpFailure);
+    }
+
+    #[test]
+    fn rejects_write_preview_for_malformed_configuration() {
+        let root = test_directory("invalid-preview");
+        let path = root.join(".npmrc");
+        fs::write(
+            &path,
+            "registry=https://registry.example/\nunrecognized line\n",
+        )
+        .unwrap();
+        let adapter = NpmAdapter::with_sources(Some(path.clone()), BTreeMap::new());
+        let current = adapter
+            .read(&ToolContext {
+                project_directory: None,
+                include_project_sources: false,
+            })
+            .unwrap();
+        let profile = Profile {
+            id: "fixture".into(),
+            name: "fixture".into(),
+            values: BTreeMap::from([(
+                "registry".into(),
+                NonSensitiveValue::new("https://registry.next.example/"),
+            )]),
+        };
+        let error = adapter
+            .plan_for_target(
+                &path,
+                ConfigScope::User,
+                USER_CONFIG_PRIORITY,
+                &profile,
+                &current,
+            )
+            .unwrap_err();
+        assert_eq!(error.code, AdapterErrorCode::ParseFailure);
+        assert!(fs::read_to_string(&path)
+            .unwrap()
+            .contains("unrecognized line"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn replacement_failure_preserves_the_original_file() {
+        let root = test_directory("replace-failure");
+        let path = root.join(".npmrc");
+        fs::write(&path, "original").unwrap();
+        fs::create_dir(root.join(".mirrorit-fixture.tmp")).unwrap();
+        assert!(write_atomic(&path, b"updated", &SnapshotRef("fixture".into())).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "original");
+        fs::remove_dir_all(root).unwrap();
     }
 
     fn test_directory(name: &str) -> PathBuf {

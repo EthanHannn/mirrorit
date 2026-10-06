@@ -177,13 +177,13 @@
   }
 }
 
-/* Translucent structural layer (titlebar only); content surfaces stay matte. */
+/* 标题栏使用轻量透明材质，内容区保持清晰的实色表面。 */
 .glass {
   background: color-mix(in srgb, var(--card) 82%, transparent);
   backdrop-filter: blur(20px) saturate(140%);
 }
 
-/* Per-tool glyph colors, kept tool-branded on both themes. */
+/* 工具字形在两种主题下保持一致的辨识色。 */
 .tool-glyph {
   color: var(--primary);
   background: color-mix(in srgb, var(--primary) 11%, var(--card));
@@ -202,7 +202,7 @@
 
 .tool-glyph[data-tool="go"],
 .tool-glyph[data-tool="pip"] {
-  color: #14805a;
+  color: #10734f;
   background: color-mix(in srgb, #30d08f 15%, var(--card));
 }
 
@@ -235,7 +235,7 @@
   background: color-mix(in srgb, #8e7dff 12%, var(--card));
 }
 
-/* Source ledger track: 1px rail + hollow nodes, filled for the winner. */
+/* 来源轨迹使用细线与节点表达覆盖关系。 */
 .ledger-track {
   position: relative;
 }

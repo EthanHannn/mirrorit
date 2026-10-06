@@ -1,5 +1,5 @@
-import { Activity, Download, FileDiff, FolderSearch } from "lucide-react";
-import { useState } from "react";
+import { Activity, Download, FileDiff } from "lucide-react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -10,6 +10,7 @@ import { WorkspaceHeader } from "@/components/workspace/workspace-header";
 import { useConfirm } from "@/hooks/use-confirm";
 import type { ToolAction, ToolScan } from "@/hooks/use-tool-scan";
 import * as api from "@/lib/api";
+import { applyAndRefresh } from "@/lib/operations";
 import { getToolMeta, npmProfileDefinitions } from "@/lib/tools";
 import type {
   ChangePlan,
@@ -31,7 +32,6 @@ interface NpmWorkspaceProps {
   healthResult: HealthCheckResult | null;
   setHealthResult: (result: HealthCheckResult | null) => void;
   projectDirectory: string;
-  setProjectDirectory: (directory: string) => void;
 }
 
 const meta = getToolMeta("npm");
@@ -55,7 +55,6 @@ export function NpmWorkspace({
   healthResult,
   setHealthResult,
   projectDirectory,
-  setProjectDirectory,
 }: NpmWorkspaceProps) {
   const confirm = useConfirm();
   const [profileKind, setProfileKind] = useState<ProfileKind>("official");
@@ -69,6 +68,9 @@ export function NpmWorkspace({
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importPreview, setImportPreview] =
     useState<NpmProfileImportPreview | null>(null);
+  const [importContext, setImportContext] = useState("");
+  const [importError, setImportError] = useState("");
+  const fileReadId = useRef(0);
 
   const loading = scan.status === "loading";
 
@@ -85,6 +87,7 @@ export function NpmWorkspace({
   async function handleScan() {
     await operate(async () => {
       setPlan(null);
+      setImportPreview(null);
       return api.scanTool(meta, projectDirectory);
     });
   }
@@ -92,6 +95,7 @@ export function NpmWorkspace({
   async function previewProfile() {
     const profile = selectedProfile();
     await operate(async () => {
+      setPlan(null);
       const [scanResult, preview] = await Promise.all([
         api.scanTool(meta, projectDirectory),
         api.previewNpmProfile({
@@ -118,11 +122,12 @@ export function NpmWorkspace({
     }
 
     await operate(async () => {
-      const applied = await api.applyNpmPreview(plan.id);
-      const scanResult = await api.scanTool(meta, projectDirectory);
-      setSnapshotId(applied.snapshot.id);
-      setPlan(null);
-      return scanResult;
+      return applyAndRefresh(
+        () => api.applyNpmPreview(plan.id),
+        setSnapshotId,
+        () => setPlan(null),
+        () => api.scanTool(meta, projectDirectory),
+      );
     });
   }
 
@@ -141,12 +146,14 @@ export function NpmWorkspace({
     await operate(async () => {
       await api.rollbackNpmSnapshot(snapshotId);
       setSnapshotId(null);
+      setPlan(null);
       return api.scanTool(meta, projectDirectory);
     });
   }
 
   async function checkHealth() {
     await operate(async () => {
+      setHealthResult(null);
       setHealthResult(await api.checkNpmHealth(healthTarget.trim()));
     });
   }
@@ -169,18 +176,26 @@ export function NpmWorkspace({
   }
 
   async function selectImportFile(file: File | undefined) {
+    const readId = ++fileReadId.current;
     setImportPreview(null);
+    setImportError("");
+    setImportContent(null);
+    setImportFileName(null);
     if (!file) {
-      setImportContent(null);
-      setImportFileName(null);
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setImportError("配置档过大，请选择不超过 1 MB 的 JSON 文件。");
       return;
     }
     try {
-      setImportContent(await file.text());
+      const content = await file.text();
+      if (readId !== fileReadId.current) return;
+      setImportContent(content);
       setImportFileName(file.name);
     } catch {
-      setImportContent(null);
-      setImportFileName(null);
+      if (readId === fileReadId.current)
+        setImportError("无法读取文件，请重新选择配置档。");
     }
   }
 
@@ -188,21 +203,26 @@ export function NpmWorkspace({
     if (!importContent) {
       return;
     }
-    const profile = selectedProfile();
     await operate(async () => {
+      setImportPreview(null);
+      const current = await api.scanTool(meta, projectDirectory);
+      setImportContext(projectDirectory);
       setImportPreview(
         await api.previewNpmProfileImport({
           content: importContent,
-          currentRegistry: profile.registry,
+          currentRegistry:
+            current.effective_config.values.registry?.value ?? "",
         }),
       );
+      return current;
     });
   }
 
   return (
-    <div className="pb-8">
+    <fieldset disabled={loading} className="min-w-0 pb-8">
       <WorkspaceHeader
         description={meta.description}
+        hasResult={scan.result !== null}
         loading={loading}
         onScan={() => void handleScan()}
         scanLabel={meta.scanLabel}
@@ -216,65 +236,6 @@ export function NpmWorkspace({
       />
 
       <section
-        aria-label="扫描范围"
-        className="grid gap-3 border-b border-border py-5 lg:grid-cols-[1fr_auto]"
-      >
-        <label className="grid gap-1.5 text-sm font-medium">
-          <span>项目目录（可选）</span>
-          <div className="relative">
-            <FolderSearch
-              aria-hidden="true"
-              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-            />
-            <Input
-              className="pl-8"
-              onChange={(event) => setProjectDirectory(event.target.value)}
-              placeholder="例如 C:\work\my-project"
-              value={projectDirectory}
-            />
-          </div>
-        </label>
-        <p className="self-end pb-2 text-xs text-muted-foreground">
-          未填写时只读取用户级和环境变量配置
-        </p>
-      </section>
-
-      <section
-        aria-labelledby="health-heading"
-        className="border-b border-border py-6"
-      >
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <h2 className="text-base font-semibold" id="health-heading">
-            npm 源连通性
-          </h2>
-          <Button
-            disabled={loading || !healthTarget.trim()}
-            onClick={() => void checkHealth()}
-            variant="outline"
-          >
-            <Activity aria-hidden="true" />
-            检查连接
-          </Button>
-        </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
-          <Input
-            aria-label="检查地址"
-            onChange={(event) => setHealthTarget(event.target.value)}
-            placeholder="https://registry.npmjs.org/"
-            value={healthTarget}
-          />
-          {healthResult ? (
-            <p className="self-center text-sm text-muted-foreground">
-              {healthResult.status === "healthy"
-                ? "连接正常"
-                : healthResult.status.replace(/_/g, " ")}{" "}
-              · {healthResult.elapsed_ms} ms
-            </p>
-          ) : null}
-        </div>
-      </section>
-
-      <section
         aria-labelledby="profile-heading"
         className="border-b border-border py-6"
       >
@@ -284,7 +245,9 @@ export function NpmWorkspace({
           </h2>
           <div className="flex flex-wrap gap-2">
             <Button
-              disabled={loading}
+              disabled={
+                loading || (profileKind === "custom" && !customRegistry.trim())
+              }
               onClick={() => void exportProfile()}
               variant="outline"
             >
@@ -292,7 +255,11 @@ export function NpmWorkspace({
               导出 JSON
             </Button>
             <Button
-              disabled={loading}
+              disabled={
+                loading ||
+                (profileKind === "custom" && !customRegistry.trim()) ||
+                (targetScope === "project" && !projectDirectory.trim())
+              }
               onClick={() => void previewProfile()}
               variant="outline"
             >
@@ -314,7 +281,10 @@ export function NpmWorkspace({
                 aria-pressed={profileKind === kind}
                 className={profileCardClass(profileKind === kind)}
                 key={kind}
-                onClick={() => setProfileKind(kind)}
+                onClick={() => {
+                  setProfileKind(kind);
+                  setPlan(null);
+                }}
                 type="button"
               >
                 <p className="text-sm font-medium">{profile.name}</p>
@@ -330,7 +300,10 @@ export function NpmWorkspace({
           <button
             aria-pressed={profileKind === "custom"}
             className={profileCardClass(profileKind === "custom")}
-            onClick={() => setProfileKind("custom")}
+            onClick={() => {
+              setProfileKind("custom");
+              setPlan(null);
+            }}
             type="button"
           >
             <p className="text-sm font-medium">自定义源</p>
@@ -345,7 +318,10 @@ export function NpmWorkspace({
             <label className="grid gap-1.5 text-sm font-medium">
               <span>自定义 registry</span>
               <Input
-                onChange={(event) => setCustomRegistry(event.target.value)}
+                onChange={(event) => {
+                  setCustomRegistry(event.target.value);
+                  setPlan(null);
+                }}
                 placeholder="https://registry.example.com/"
                 value={customRegistry}
               />
@@ -360,13 +336,16 @@ export function NpmWorkspace({
           <label className="grid gap-1.5 text-sm font-medium">
             <span>目标作用域</span>
             <Select
-              onChange={(event) =>
-                setTargetScope(event.target.value as TargetScope)
-              }
+              onChange={(event) => {
+                setTargetScope(event.target.value as TargetScope);
+                setPlan(null);
+              }}
               value={targetScope}
             >
               <option value="user">用户级 .npmrc</option>
-              <option value="project">项目级 .npmrc</option>
+              <option value="project" disabled={!projectDirectory.trim()}>
+                项目级 .npmrc
+              </option>
             </Select>
           </label>
         </div>
@@ -377,10 +356,12 @@ export function NpmWorkspace({
           </p>
         ) : null}
 
-        <div className="mt-5 border-t border-border pt-5">
+        <details className="mt-5 border-t border-border pt-4">
+          <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+            从 JSON 导入配置档
+          </summary>
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium">导入配置档</p>
+            <div className="pt-3">
               <p className="mt-1 text-sm text-muted-foreground">
                 仅比较所选 JSON 配置档，不会应用任何更改。
               </p>
@@ -410,16 +391,24 @@ export function NpmWorkspace({
               已选择 {importFileName}，尚未应用。
             </p>
           ) : null}
-          {importPreview ? (
+          {importError ? (
+            <p role="alert" className="mt-2 text-xs text-destructive">
+              {importError}
+            </p>
+          ) : null}
+          {importPreview &&
+          importContext === projectDirectory &&
+          scan.result ? (
             <div className="mt-3 grid gap-2 border-l border-warning bg-warning/5 px-4 py-3 text-sm">
               <p className="font-medium">
                 {importPreview.name}{" "}
                 {importPreview.changed
-                  ? "将替换当前 registry"
+                  ? "与扫描到的 registry 不同"
                   : "与当前 registry 相同"}
               </p>
               <code className="truncate font-mono text-xs text-muted-foreground">
-                当前：{importPreview.current_registry}
+                扫描值：
+                {importPreview.current_registry || "当前扫描范围内未设置"}
               </code>
               <code className="truncate font-mono text-xs text-muted-foreground">
                 导入：{importPreview.imported_registry}
@@ -429,7 +418,7 @@ export function NpmWorkspace({
               </p>
             </div>
           ) : null}
-        </div>
+        </details>
       </section>
 
       {plan ? (
@@ -449,6 +438,43 @@ export function NpmWorkspace({
           snapshotId={snapshotId}
         />
       ) : null}
-    </div>
+      <section
+        aria-labelledby="health-heading"
+        className="border-b border-border py-6"
+      >
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <h2 className="text-base font-semibold" id="health-heading">
+            npm 源连通性
+          </h2>
+          <Button
+            disabled={loading || !healthTarget.trim()}
+            onClick={() => void checkHealth()}
+            variant="outline"
+          >
+            <Activity aria-hidden="true" />
+            检查连接
+          </Button>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
+          <Input
+            aria-label="检查地址"
+            onChange={(event) => {
+              setHealthTarget(event.target.value);
+              setHealthResult(null);
+            }}
+            placeholder="https://registry.npmjs.org/"
+            value={healthTarget}
+          />
+          {healthResult ? (
+            <p className="self-center text-sm text-muted-foreground">
+              {healthResult.status === "healthy"
+                ? "连接正常"
+                : healthResult.status.replace(/_/g, " ")}{" "}
+              · {healthResult.elapsed_ms} ms
+            </p>
+          ) : null}
+        </div>
+      </section>
+    </fieldset>
   );
 }

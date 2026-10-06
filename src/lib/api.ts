@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke as tauriInvoke, isTauri } from "@tauri-apps/api/core";
 import type { ToolMeta } from "@/lib/tools";
 import type {
   ApplyResult,
@@ -10,6 +10,20 @@ import type {
   TargetScope,
   ToolReadResult,
 } from "@/lib/types";
+
+function invoke<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  if (!isTauri()) {
+    return Promise.reject(
+      new Error(
+        "读取本机配置需要 MirrorIt 桌面客户端。当前为浏览器预览，请在桌面窗口中执行此操作。",
+      ),
+    );
+  }
+  return tauriInvoke<T>(command, args);
+}
 
 export function scanTool(
   meta: ToolMeta,

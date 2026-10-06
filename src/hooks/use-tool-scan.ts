@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { scanTool } from "@/lib/api";
 import { getToolMeta, type ToolId } from "@/lib/tools";
 import type { ToolReadResult } from "@/lib/types";
@@ -31,15 +31,29 @@ function initialScans(): ScanMap {
 
 export type ToolAction = () => Promise<ToolReadResult | null | void>;
 
-/**
- * Tracks one independent scan/operation state per tool, so activity in one
- * workspace never leaks into another tool's status.
- */
+// 每个工具独立记录状态，并阻止同一工具的重复操作。
 export function useToolScans(projectDirectory: string) {
   const [scans, setScans] = useState<ScanMap>(initialScans);
+  const pending = useRef(new Set<ToolId>());
+
+  const resetProjectScans = useCallback(() => {
+    setScans(
+      (current) =>
+        Object.fromEntries(
+          Object.entries(current).map(([tool, state]) => [
+            tool,
+            getToolMeta(tool as ToolId).acceptsProjectDirectory
+              ? { ...idleScan }
+              : state,
+          ]),
+        ) as ScanMap,
+    );
+  }, []);
 
   const operate = useCallback(
     async (tool: ToolId, action: ToolAction): Promise<void> => {
+      if (pending.current.has(tool)) return;
+      pending.current.add(tool);
       setScans((current) => ({
         ...current,
         [tool]: { ...current[tool], status: "loading", error: "" },
@@ -57,8 +71,14 @@ export function useToolScans(projectDirectory: string) {
       } catch (error) {
         setScans((current) => ({
           ...current,
-          [tool]: { ...current[tool], status: "error", error: String(error) },
+          [tool]: {
+            ...current[tool],
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+          },
         }));
+      } finally {
+        pending.current.delete(tool);
       }
     },
     [],
@@ -70,5 +90,5 @@ export function useToolScans(projectDirectory: string) {
     [operate, projectDirectory],
   );
 
-  return { scans, scan, operate };
+  return { scans, scan, operate, resetProjectScans };
 }

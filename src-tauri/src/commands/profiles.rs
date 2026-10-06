@@ -83,10 +83,7 @@ fn build_npm_export(profile: ExportNpmProfileInput) -> Result<ProfileExportDocum
         return Err("配置档必须包含名称和标识。".into());
     }
     let registry = profile.registry.trim();
-    if !registry.starts_with("https://")
-        || registry[8..].contains('@')
-        || registry.contains(char::is_whitespace)
-    {
+    if !crate::adapters::url::is_safe_https_url(registry) {
         return Err("配置档包含不安全或无效的 registry 地址。".into());
     }
 
@@ -125,7 +122,9 @@ fn build_npm_import_preview(
         return Err("导入文件包含不受支持的配置档内容。".into());
     };
     validate_registry(registry)?;
-    validate_registry(current_registry)?;
+    if !current_registry.is_empty() {
+        validate_registry(current_registry)?;
+    }
 
     Ok(NpmProfileImportPreview {
         id: profile.id.trim().to_owned(),
@@ -138,10 +137,7 @@ fn build_npm_import_preview(
 
 fn validate_registry(registry: &str) -> Result<(), String> {
     let registry = registry.trim();
-    if !registry.starts_with("https://")
-        || registry[8..].contains('@')
-        || registry.contains(char::is_whitespace)
-    {
+    if !crate::adapters::url::is_safe_https_url(registry) {
         return Err("配置档包含不安全或无效的 registry 地址。".into());
     }
     Ok(())
@@ -150,6 +146,20 @@ fn validate_registry(registry: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_scanned_registry_is_not_reported_as_the_official_default() {
+        let content = r#"{"format":"mirrorit-profile","version":1,"profiles":[{"tool":"npm","id":"official","name":"官方源","values":{"registry":"https://registry.npmjs.org/"}}]}"#;
+        let preview = build_npm_import_preview(content, "").unwrap();
+        assert!(preview.current_registry.is_empty());
+        assert!(preview.changed);
+    }
+
+    #[test]
+    fn imported_registry_cannot_include_query_credentials() {
+        let content = r#"{"format":"mirrorit-profile","version":1,"profiles":[{"tool":"npm","id":"custom","name":"自定义源","values":{"registry":"https://registry.example/?token=fixture"}}]}"#;
+        assert!(build_npm_import_preview(content, "https://registry.npmjs.org/").is_err());
+    }
 
     #[test]
     fn exports_a_deterministic_non_sensitive_document() {

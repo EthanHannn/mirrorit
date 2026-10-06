@@ -1,4 +1,5 @@
-import { ShieldCheck } from "lucide-react";
+import { Check, LoaderCircle, ShieldCheck, TriangleAlert } from "lucide-react";
+import type { ToolScan } from "@/hooks/use-tool-scan";
 import { toolNavigation, type ToolId } from "@/lib/tools";
 import { cn } from "@/lib/utils";
 
@@ -6,24 +7,29 @@ interface SidebarProps {
   activeTool: ToolId;
   onSelect: (tool: ToolId) => void;
   ready: Record<ToolId, boolean>;
+  scans: Record<ToolId, ToolScan>;
 }
 
-export function Sidebar({ activeTool, onSelect, ready }: SidebarProps) {
+export function Sidebar({ activeTool, onSelect, ready, scans }: SidebarProps) {
   return (
     <aside className="flex min-h-0 min-w-0 flex-col border-hairline bg-sidebar p-1.5 max-[760px]:border-b min-[760px]:row-span-2 min-[760px]:border-r min-[760px]:px-2.5 min-[760px]:pt-4 min-[760px]:pb-3 min-[1100px]:row-span-1">
       <div className="flex items-center justify-between px-2 pb-2 text-[0.6875rem] font-semibold text-muted-foreground max-[760px]:hidden">
         <span>开发工具</span>
-        <span className="tabular-nums">{toolNavigation.length}</span>
+        <span className="tabular-nums">
+          {Object.values(ready).filter(Boolean).length} /{" "}
+          {toolNavigation.length} 已读取
+        </span>
       </div>
       <nav
         aria-label="工具导航"
-        className="flex gap-0.5 overflow-x-auto min-[760px]:grid min-[760px]:overflow-y-auto"
+        className="flex gap-1 overflow-x-auto min-[760px]:grid min-[760px]:content-start min-[760px]:overflow-y-auto"
       >
         {toolNavigation.map((tool) => {
           const active = activeTool === tool.id;
           return (
             <button
               aria-current={active ? "page" : undefined}
+              title={`${tool.label} · ${scans[tool.id].status === "loading" ? "正在处理" : scans[tool.id].status === "error" ? "操作失败" : ready[tool.id] ? "已读取" : "未扫描"}`}
               className={cn(
                 "grid min-h-11 min-w-0 grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-muted-foreground outline-none transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 active:scale-[0.985] max-[760px]:min-h-9 max-[760px]:min-w-max max-[760px]:grid-cols-[1.75rem_auto]",
                 active && "bg-sidebar-accent text-sidebar-accent-foreground",
@@ -47,15 +53,29 @@ export function Sidebar({ activeTool, onSelect, ready }: SidebarProps) {
                   {tool.mode}
                 </span>
               </span>
-              <span
-                aria-label={ready[tool.id] ? "已读取" : "未读取"}
-                className={cn(
-                  "size-1.5 rounded-full max-[760px]:hidden",
-                  ready[tool.id]
-                    ? "bg-success shadow-[0_0_0_2px_color-mix(in_srgb,var(--success)_14%,transparent)]"
-                    : "bg-border",
+              <span className="max-[760px]:hidden">
+                {scans[tool.id].status === "loading" ? (
+                  <LoaderCircle
+                    aria-label="正在处理"
+                    className="size-3.5 animate-spin text-primary"
+                  />
+                ) : scans[tool.id].status === "error" ? (
+                  <TriangleAlert
+                    aria-label="操作失败"
+                    className="size-3.5 text-destructive"
+                  />
+                ) : ready[tool.id] ? (
+                  <Check
+                    aria-label="已读取"
+                    className="size-3.5 text-success"
+                  />
+                ) : (
+                  <span
+                    aria-label="未扫描"
+                    className="block size-1.5 rounded-full bg-border"
+                  />
                 )}
-              />
+              </span>
             </button>
           );
         })}

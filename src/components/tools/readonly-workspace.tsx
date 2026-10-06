@@ -18,6 +18,7 @@ export function ReadOnlyWorkspace({
     <div className="pb-8">
       <WorkspaceHeader
         description={meta.description}
+        hasResult={scan.result !== null}
         loading={scan.status === "loading"}
         onScan={onScan}
         scanLabel={meta.scanLabel}

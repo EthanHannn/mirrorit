@@ -37,18 +37,21 @@ pub struct NpmPreviewRequest {
 }
 
 #[tauri::command]
-pub fn scan_npm(project_directory: Option<String>) -> Result<ReadResult, String> {
-    let project_directory = project_directory
-        .filter(|path| !path.trim().is_empty())
-        .map(validate_project_directory)
-        .transpose()?;
+pub async fn scan_npm(project_directory: Option<String>) -> Result<ReadResult, String> {
+    super::run_read(move || {
+        let project_directory = project_directory
+            .filter(|path| !path.trim().is_empty())
+            .map(validate_project_directory)
+            .transpose()?;
 
-    NpmAdapter::from_system()
-        .read(&ToolContext {
-            project_directory,
-            include_project_sources: true,
-        })
-        .map_err(|error| error.message)
+        NpmAdapter::from_system()
+            .read(&ToolContext {
+                project_directory,
+                include_project_sources: true,
+            })
+            .map_err(|error| error.message)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -86,6 +89,7 @@ pub fn preview_npm_profile(
     let plan = adapter
         .plan_for_target(&path, scope, priority, &profile, &current_config)
         .map_err(|error| error.message)?;
+    let plan = super::preview::identify_plan(plan)?;
     preview_store
         .0
         .lock()
@@ -124,10 +128,13 @@ pub fn rollback_npm_snapshot(snapshot_id: String) -> Result<Operation, String> {
 }
 
 #[tauri::command]
-pub fn check_npm_health(address: String) -> Result<HealthCheckResult, String> {
-    NpmAdapter::from_system()
-        .health_check(&HealthCheckTarget { address })
-        .map_err(|error| error.message)
+pub async fn check_npm_health(address: String) -> Result<HealthCheckResult, String> {
+    super::run_read(move || {
+        NpmAdapter::from_system()
+            .health_check(&HealthCheckTarget { address })
+            .map_err(|error| error.message)
+    })
+    .await
 }
 
 fn validate_project_directory(path: String) -> Result<String, String> {
@@ -169,10 +176,7 @@ fn validate_profile(profile: &NpmProfileInput) -> Result<(), String> {
     }
 
     let registry = profile.registry.trim();
-    if !registry.starts_with("https://")
-        || registry[8..].contains('@')
-        || registry.contains(char::is_whitespace)
-    {
+    if !crate::adapters::url::is_safe_https_url(registry) {
         return Err("registry 必须是未含凭据的 HTTPS 地址。".into());
     }
 

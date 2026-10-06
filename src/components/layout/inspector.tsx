@@ -69,7 +69,12 @@ export function Inspector({
         <h2 className="text-[0.8125rem] font-semibold">检查器</h2>
       </header>
 
-      <div className="min-h-0 overscroll-contain max-[1100px]:flex max-[1100px]:overflow-x-auto min-[1100px]:overflow-y-auto">
+      <div
+        role="region"
+        tabIndex={0}
+        aria-label="工具状态与来源概览"
+        className="min-h-0 overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring max-[1100px]:flex max-[1100px]:overflow-x-auto min-[1100px]:overflow-y-auto"
+      >
         <Section>
           <div className="flex items-center gap-2.5">
             <span
@@ -105,16 +110,16 @@ export function Inspector({
                 />
                 <div className="grid min-w-0 gap-1">
                   <span className="font-semibold text-foreground">
-                    读取失败，未修改任何配置。
+                    操作未完成
                   </span>
                   <small className="text-[0.6875rem] text-muted-foreground">
-                    请检查工具安装或配置路径后重试。
+                    请查看工作区中的具体原因；写入后的读取失败不代表配置未改变。
                   </small>
                   <details>
                     <summary className="cursor-pointer text-[0.6875rem] text-muted-foreground">
                       技术详情
                     </summary>
-                    <code className="mt-1 block truncate rounded bg-muted p-1.5 font-mono text-[0.625rem] text-muted-foreground">
+                    <code className="mt-1 block break-all rounded bg-muted p-1.5 font-mono text-xs text-muted-foreground">
                       {scan.error}
                     </code>
                   </details>

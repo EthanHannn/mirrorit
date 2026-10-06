@@ -21,13 +21,16 @@ pub struct MavenMirrorPreviewRequest {
 }
 
 #[tauri::command]
-pub fn scan_maven() -> Result<ReadResult, String> {
-    MavenAdapter::from_system()
-        .read(&ToolContext {
-            project_directory: None,
-            include_project_sources: false,
-        })
-        .map_err(|error| error.message)
+pub async fn scan_maven() -> Result<ReadResult, String> {
+    super::run_read(move || {
+        MavenAdapter::from_system()
+            .read(&ToolContext {
+                project_directory: None,
+                include_project_sources: false,
+            })
+            .map_err(|error| error.message)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -58,6 +61,7 @@ pub fn preview_maven_mirror_update(
             current_config: &current_config,
         })
         .map_err(|error| error.message)?;
+    let plan = super::preview::identify_plan(plan)?;
     preview_store
         .0
         .lock()
@@ -100,7 +104,7 @@ fn validate_request(request: &MavenMirrorPreviewRequest) -> Result<(), String> {
         return Err("请选择要更新的 Maven 镜像。".into());
     }
     let url = request.url.trim();
-    if !url.starts_with("https://") || url[8..].contains('@') || url.contains(char::is_whitespace) {
+    if !crate::adapters::url::is_safe_https_url(url) {
         return Err("镜像 URL 必须是未含凭据的 HTTPS 地址。".into());
     }
 

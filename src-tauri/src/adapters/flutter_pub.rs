@@ -661,10 +661,7 @@ fn redact_credentials(value: &str) -> String {
 
 fn validate_hosted_url(value: &str) -> AdapterResult<()> {
     let value = value.trim();
-    if !value.starts_with("https://")
-        || value[8..].contains('@')
-        || value.contains(char::is_whitespace)
-    {
+    if !crate::adapters::url::is_safe_https_url(value) {
         return Err(AdapterError {
             code: AdapterErrorCode::InvalidInput,
             message: "Flutter/Pub hosted 源必须是未含凭据的 HTTPS 地址。".into(),

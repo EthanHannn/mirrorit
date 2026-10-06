@@ -21,18 +21,21 @@ pub struct FlutterPubHostedPreviewRequest {
 }
 
 #[tauri::command]
-pub fn scan_flutter_pub(project_directory: Option<String>) -> Result<ReadResult, String> {
-    let project_directory = project_directory
-        .filter(|path| !path.trim().is_empty())
-        .map(validate_project_directory)
-        .transpose()?;
+pub async fn scan_flutter_pub(project_directory: Option<String>) -> Result<ReadResult, String> {
+    super::run_read(move || {
+        let project_directory = project_directory
+            .filter(|path| !path.trim().is_empty())
+            .map(validate_project_directory)
+            .transpose()?;
 
-    FlutterPubAdapter::from_system()
-        .read(&ToolContext {
-            project_directory,
-            include_project_sources: true,
-        })
-        .map_err(|error| error.message)
+        FlutterPubAdapter::from_system()
+            .read(&ToolContext {
+                project_directory,
+                include_project_sources: true,
+            })
+            .map_err(|error| error.message)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -69,6 +72,7 @@ pub fn preview_flutter_pub_hosted_update(
             current_config: &current_config,
         })
         .map_err(|error| error.message)?;
+    let plan = super::preview::identify_plan(plan)?;
     preview_store
         .0
         .lock()
